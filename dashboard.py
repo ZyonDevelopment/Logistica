@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -12,8 +12,8 @@ LOGISTICA_CSV = BASE_DIR / "9720575575b77630c182a6ddcfc0e90a11526c7d.csv"
 CONSULTA_PEDIDOS_XLSX = BASE_DIR / "ConsultaPedidos_89ac3e7f-87ef-4bc8-99b9-3996ab119944.xlsx"
 
 st.set_page_config(
-    page_title="Dashboard LogÃ­stica",
-    page_icon="ðŸ“¦",
+    page_title="Dashboard Logística",
+    page_icon="📦",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -49,9 +49,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-BADGE_LOG  = '<span class="fonte-badge fonte-log">ðŸ“¦ Fonte: LogÃ­stica</span>'
-BADGE_PED  = '<span class="fonte-badge fonte-ped">ðŸ›’ Fonte: Pedidos Comerciais</span>'
-BADGE_BOTH = '<span class="fonte-badge fonte-both">ðŸ”— LogÃ­stica + Pedidos</span>'
+BADGE_LOG  = '<span class="fonte-badge fonte-log">📦 Fonte: Logística</span>'
+BADGE_PED  = '<span class="fonte-badge fonte-ped">🛒 Fonte: Pedidos Comerciais</span>'
+BADGE_BOTH = '<span class="fonte-badge fonte-both">🔗 Logística + Pedidos</span>'
 
 COR_OK    = "#22c55e"
 COR_WARN  = "#f59e0b"
@@ -90,7 +90,7 @@ METAS_PRAZO = {
     "Omnichannel": 98.0,
 }
 
-# â”€â”€ FormataÃ§Ã£o Brasileira â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Formatação Brasileira ──────────────────────────────────────────────────────
 def fmt_num(v, dec=0):
     s = f"{float(v):,.{dec}f}"
     return s.replace(",", "X").replace(".", ",").replace("X", ".")
@@ -105,7 +105,7 @@ def meta_canal(canal_sel, tipo="entrega"):
     metas = METAS_ENTREGUES if tipo == "entrega" else METAS_PRAZO
     if canal_sel == "Omnichannel":
         return metas["Omnichannel"], "Omnichannel"
-    if canal_sel == "LogÃ­stico":
+    if canal_sel == "Logístico":
         return metas["Plataforma Logistica"], "Plataforma Logistica"
     return metas["Interna"], "Interna"
 
@@ -113,8 +113,8 @@ def status_meta_pct(valor, meta):
     if valor >= meta:
         return "OK", COR_OK
     if valor >= meta * 0.95:
-        return "AtenÃ§Ã£o", COR_WARN
-    return "CrÃ­tico", COR_ERR
+        return "Atenção", COR_WARN
+    return "Crítico", COR_ERR
 
 def status_custo(valor):
     return ("OK", COR_OK) if valor < META_CUSTO_MEDIO else ("Preocupante", COR_WARN)
@@ -127,7 +127,7 @@ def meta_tempo_por_municipio(municipio, *, tipo):
         return 2 if eh_itabuna(municipio) else 3
     return 1 if eh_itabuna(municipio) else 2
 
-# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Helpers ────────────────────────────────────────────────────────────────────
 def extrair_pdv(v):
     if pd.isna(v): return "Desconhecido"
     m = re.match(r"(\d{5})", str(v).strip())
@@ -155,6 +155,10 @@ def layout_br(**kwargs):
     base = dict(separators=",.", font=dict(family="sans-serif"))
     base.update(kwargs)
     return base
+
+def dias_entre(inicio, fim):
+    dias = (fim - inicio).dt.total_seconds() / 86400
+    return dias.where(dias >= 0)
 
 def _serie_limpa(s, vazio="Sem ocorrencia/mensagem registrada"):
     out = s.fillna("").astype(str).str.strip()
@@ -231,7 +235,7 @@ def render_excecoes_pivot(df_ex, *, titulo, dias_label, key_prefix, incluir_stat
         )
         st.dataframe(detalhe.reset_index(drop=True), use_container_width=True, height=520)
 
-# â”€â”€ Carga â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Carga ──────────────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner="Carregando dados...")
 def carregar():
     df_log = pd.read_csv(
@@ -239,13 +243,13 @@ def carregar():
         encoding="utf-8-sig",
     )
     for c in df_log.columns:
-        if "criaÃ§Ã£o" in c or "Data de c" in c:
+        if "criação" in c or "Data de c" in c:
             df_log["_criacao"] = pd.to_datetime(df_log[c], errors="coerce"); break
     for c in df_log.columns:
         if "hora efetuada" in c:
             df_log["_efetuada"] = pd.to_datetime(df_log[c], errors="coerce"); break
     for c in df_log.columns:
-        if "aprovaÃ§Ã£o" in c or "aprovacao" in c:
+        if "aprovação" in c or "aprovacao" in c:
             df_log["_aprov"] = pd.to_datetime(df_log[c], errors="coerce"); break
     for c in df_log.columns:
         if "Data de Coleta" in c or "coleta" in c.lower():
@@ -259,7 +263,9 @@ def carregar():
     if "_coleta" not in df_log.columns:
         df_log["_coleta"] = pd.NaT
 
-    df_log["TAT_dias"]  = (df_log["_efetuada"] - df_log["_aprov"]).dt.total_seconds() / 86400
+    tat_raw = (df_log["_efetuada"] - df_log["_aprov"]).dt.total_seconds() / 86400
+    df_log["TAT_invalido"] = tat_raw < 0
+    df_log["TAT_dias"]  = tat_raw.where(tat_raw >= 0)
     df_log["NoPrazo"]   = (df_log["Status"] == "Entregue") & (df_log["_efetuada"].dt.date <= df_log["_prazo"].dt.date)
     df_log["PDV"]       = df_log["Expedidor"].apply(extrair_pdv)
     df_log["Pedido"]    = df_log["Pedido"].astype(str).str.strip()
@@ -290,17 +296,17 @@ def carregar():
         engine="openpyxl",
     )
     df_ped["CodigoPedido"] = df_ped["CodigoPedido"].astype(str).str.strip()
-    for c in ["DataFaturamento", "Data AprovaÃ§Ã£o", "DataEntrega"]:
+    for c in ["DataFaturamento", "Data Aprovação", "DataEntrega"]:
         if c in df_ped.columns:
             df_ped[c] = pd.to_datetime(df_ped[c], errors="coerce", dayfirst=True)
     col_canal = find_col(df_ped, "CanalDistribuicao","Canal")
     if col_canal:
         df_ped["PDV_Ped"] = df_ped[col_canal].apply(extrair_pdv)
 
-    # â”€â”€ ClassificaÃ§Ã£o TipoCanal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    # Omnichannel  = MeioCaptacao contÃ©m "Omni" (prioridade)
-    # LogÃ­stico    = CodigoPedido tem correspondÃªncia no CSV logÃ­stico
-    # NÃ£o LogÃ­stico = demais
+    # ── Classificação TipoCanal ────────────────────────────────────────────────
+    # Omnichannel  = MeioCaptacao contém "Omni" (prioridade)
+    # Logístico    = CodigoPedido tem correspondência no CSV logístico
+    # Não Logístico = demais
     ids_log = set(df_log["Pedido"].astype(str).str.strip())
     col_meio_ped = find_col(df_ped, "MeioCaptacao", "eioCaptacao")
 
@@ -309,8 +315,8 @@ def carregar():
         if "omni" in meio.lower():
             return "Omnichannel"
         if row["CodigoPedido"] in ids_log:
-            return "LogÃ­stico"
-        return "NÃ£o LogÃ­stico"
+            return "Logístico"
+        return "Não Logístico"
 
     df_ped["TipoCanal"] = df_ped.apply(classificar_canal, axis=1)
 
@@ -320,8 +326,12 @@ def carregar():
         df_join["_faturamento"] = pd.to_datetime(df_join["DataFaturamento"], errors="coerce")
     else:
         df_join["_faturamento"] = pd.NaT
-    df_join["TP_dias"] = (df_join["_faturamento"] - df_join["_aprov"]).dt.total_seconds() / 86400
-    df_join["TE_dias"] = (df_join["_efetuada"] - df_join["_coleta"]).dt.total_seconds() / 86400
+    tp_raw = (df_join["_faturamento"] - df_join["_aprov"]).dt.total_seconds() / 86400
+    te_raw = (df_join["_efetuada"] - df_join["_coleta"]).dt.total_seconds() / 86400
+    df_join["TP_invalido"] = tp_raw < 0
+    df_join["TE_invalido"] = te_raw < 0
+    df_join["TP_dias"] = tp_raw.where(tp_raw >= 0)
+    df_join["TE_dias"] = te_raw.where(te_raw >= 0)
 
     return df_log, df_ped, df_join, {
         "sit":    find_col(df_ped, "SituacaoComercial","ituacaoComercial"),
@@ -334,64 +344,64 @@ def carregar():
 
 df_log, df_ped, df_join, COLS = carregar()
 
-# â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.title("ðŸ” Filtros")
+    st.title("Filtros")
     dmin = df_log["_criacao"].dropna().dt.date.min()
     dmax = df_log["_criacao"].dropna().dt.date.max()
-    periodo = st.date_input("PerÃ­odo (criaÃ§Ã£o)", value=(dmin, dmax), min_value=dmin, max_value=dmax)
+    periodo = st.date_input("Período (criação)", value=(dmin, dmax), min_value=dmin, max_value=dmax)
     dt_ini = pd.Timestamp(periodo[0] if isinstance(periodo,(list,tuple)) else dmin)
     dt_fim = pd.Timestamp(periodo[1] if isinstance(periodo,(list,tuple)) and len(periodo)==2 else dmax)
 
     pdv_opts = ["Todos"] + sorted(df_log["PDV"].unique().tolist())
     pdv_sel  = st.selectbox("PDV (Expedidor)", pdv_opts)
 
-    # â”€â”€ Filtro Canal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    canal_opts = ["Todos", "LogÃ­stico", "NÃ£o LogÃ­stico", "Omnichannel"]
+    # ── Filtro Canal ──────────────────────────────────────────────────────────
+    canal_opts = ["Todos", "Logístico", "Não Logístico", "Omnichannel"]
     canal_sel  = st.selectbox(
         "Canal / Tipo de Pedido",
         canal_opts,
         help=(
-            "LogÃ­stico = pedidos que geraram expediÃ§Ã£o logÃ­stica\n"
-            "NÃ£o LogÃ­stico = pedidos comerciais sem movimentaÃ§Ã£o logÃ­stica\n"
+            "Logístico = pedidos que geraram expedição logística\n"
+            "Não Logístico = pedidos comerciais sem movimentação logística\n"
             "Omnichannel = MeioCaptacao 'Pedido Omnichannel'"
         ),
     )
 
     st.markdown("---")
     st.markdown("**Fontes de dados**")
-    st.caption(f"ðŸ“¦ LogÃ­stica: {fmt_num(len(df_log))} pedidos")
-    st.caption(f"ðŸ›’ Pedidos comerciais: {fmt_num(len(df_ped))} registros")
+    st.caption(f"📦 Logística: {fmt_num(len(df_log))} pedidos")
+    st.caption(f"🛒 Pedidos comerciais: {fmt_num(len(df_ped))} registros")
 
-    cnt_log  = (df_ped["TipoCanal"] == "LogÃ­stico").sum()
-    cnt_nlog = (df_ped["TipoCanal"] == "NÃ£o LogÃ­stico").sum()
+    cnt_log  = (df_ped["TipoCanal"] == "Logístico").sum()
+    cnt_nlog = (df_ped["TipoCanal"] == "Não Logístico").sum()
     cnt_omni = (df_ped["TipoCanal"] == "Omnichannel").sum()
-    st.markdown("**ComposiÃ§Ã£o dos canais (total):**")
-    st.caption(f"â€¢ LogÃ­stico: {fmt_num(cnt_log)}")
-    st.caption(f"â€¢ NÃ£o LogÃ­stico: {fmt_num(cnt_nlog)}")
-    st.caption(f"â€¢ Omnichannel: {fmt_num(cnt_omni)}")
+    st.markdown("**Composição dos canais (total):**")
+    st.caption(f"• Logístico: {fmt_num(cnt_log)}")
+    st.caption(f"• Não Logístico: {fmt_num(cnt_nlog)}")
+    st.caption(f"• Omnichannel: {fmt_num(cnt_omni)}")
 
-# â”€â”€ Aplicar filtros â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# LogÃ­stica (CSV) â€” data + PDV
+# ── Aplicar filtros ────────────────────────────────────────────────────────────
+# Logística (CSV) — data + PDV
 mask = (df_log["_criacao"] >= dt_ini) & (df_log["_criacao"] <= dt_fim + pd.Timedelta(days=1))
 if pdv_sel != "Todos": mask &= df_log["PDV"] == pdv_sel
 df = df_log[mask].copy()
 
-# Filtro canal na logÃ­stica
-if canal_sel == "NÃ£o LogÃ­stico":
-    df = df.iloc[0:0].copy()           # nÃ£o logÃ­stico nunca tem registro no CSV
+# Filtro canal na logística
+if canal_sel == "Não Logístico":
+    df = df.iloc[0:0].copy()           # não logístico nunca tem registro no CSV
 elif canal_sel == "Omnichannel":
     ids_omni = set(df_ped[df_ped["TipoCanal"] == "Omnichannel"]["CodigoPedido"])
     df = df[df["Pedido"].isin(ids_omni)].copy()
-# "LogÃ­stico" e "Todos" mantÃªm df intacto
+# "Logístico" e "Todos" mantêm df intacto
 
-# Pedidos comerciais â€” filtro canal
+# Pedidos comerciais — filtro canal
 if canal_sel == "Todos":
     df_ped_f = df_ped.copy()
 else:
     df_ped_f = df_ped[df_ped["TipoCanal"] == canal_sel].copy()
 
-# Join â€” data + PDV + canal
+# Join — data + PDV + canal
 mask_j = (df_join["_criacao"] >= dt_ini) & (df_join["_criacao"] <= dt_fim + pd.Timedelta(days=1))
 if pdv_sel != "Todos": mask_j &= df_join["PDV"] == pdv_sel
 if canal_sel != "Todos":
@@ -400,7 +410,7 @@ if canal_sel != "Todos":
 dj  = df_join[mask_j].copy()
 dj_v = dj.dropna(subset=["CodigoPedido"]).copy()
 
-# â”€â”€ MÃ©tricas base â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Métricas base ──────────────────────────────────────────────────────────────
 total_ped  = len(df_ped_f)
 total_log  = len(df)
 n_join     = len(dj_v)
@@ -413,6 +423,9 @@ fora_prazo = entregues - no_prazo
 
 tat_vals   = df.loc[(df["Status"]=="Entregue") & df["TAT_dias"].between(0,30), "TAT_dias"]
 tat_med    = tat_vals.mean() if len(tat_vals) else 0
+tat_invalidos = int(df.get("TAT_invalido", pd.Series(False, index=df.index)).fillna(False).sum())
+tp_invalidos = int(dj.get("TP_invalido", pd.Series(False, index=dj.index)).fillna(False).sum())
+te_invalidos = int(dj.get("TE_invalido", pd.Series(False, index=dj.index)).fillna(False).sum())
 
 custo_por_pedido = CUSTO_TOTAL_MOTORISTAS / total_log if total_log else 0
 df["Custo_Entrega"] = custo_por_pedido if total_log else 0
@@ -431,17 +444,17 @@ status_entrega, cor_meta_entrega = status_meta_pct(pct_entregues, meta_entrega)
 status_prazo, cor_meta_prazo = status_meta_pct(pct_prazo, meta_prazo)
 status_custo_txt, cor_custo = status_custo(custo_por_pedido)
 
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-# CABEÃ‡ALHO
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-st.title("ðŸ“¦ Dashboard de Entregas â€” CP Velanes / GB.Log")
+# -----------------------------------------------------------------------------
+# CABEÇALHO
+# -----------------------------------------------------------------------------
+st.title("📦 Dashboard de Entregas — CP Velanes / GB.Log")
 
 # Indicador do filtro canal ativo
 canal_info = {
-    "Todos":          ("ðŸ”­ VisÃ£o completa: todos os canais",                          "#6366f1"),
-    "LogÃ­stico":      ("ðŸ“¦ Filtro ativo: somente pedidos com expediÃ§Ã£o logÃ­stica",    "#22c55e"),
-    "NÃ£o LogÃ­stico":  ("ðŸ›’ Filtro ativo: somente pedidos sem movimentaÃ§Ã£o logÃ­stica", "#f59e0b"),
-    "Omnichannel":    ("ðŸŒ Filtro ativo: somente pedidos Omnichannel",                "#60a5fa"),
+    "Todos":          ("🔭 Visão completa: todos os canais",                          "#6366f1"),
+    "Logístico":      ("📦 Filtro ativo: somente pedidos com expedição logística",    "#22c55e"),
+    "Não Logístico":  ("🛒 Filtro ativo: somente pedidos sem movimentação logística", "#f59e0b"),
+    "Omnichannel":    ("Filtro ativo: somente pedidos Omnichannel",                "#60a5fa"),
 }
 ci_label, ci_color = canal_info[canal_sel]
 st.markdown(
@@ -453,66 +466,66 @@ st.markdown(
 
 if canal_sel == "Todos":
     resumo = (
-        f'No mÃªs de junho, o sistema comercial registrou <b>{fmt_num(total_ped)} pedidos</b> em 7 canais (PDVs). '
-        f'Desses, <b>{fmt_num(n_join)} ({fmt_pct(pct_log, 1)}) foram roteados para a logÃ­stica</b> e atendidos pela gb.log. '
-        f'Os demais <b>{fmt_num(sem_log)} permaneceram fora do fluxo logÃ­stico</b>. '
-        f'Das <b>{fmt_num(total_log)} remessas logÃ­sticas</b>, <b>{fmt_num(entregues)} foram entregues ({fmt_pct(pct_entregues, 1)})</b>, '
+        f'No mês de junho, o sistema comercial registrou <b>{fmt_num(total_ped)} pedidos</b> em 7 canais (PDVs). '
+        f'Desses, <b>{fmt_num(n_join)} ({fmt_pct(pct_log, 1)}) foram roteados para a logística</b> e atendidos pela gb.log. '
+        f'Os demais <b>{fmt_num(sem_log)} permaneceram fora do fluxo logístico</b>. '
+        f'Das <b>{fmt_num(total_log)} remessas logísticas</b>, <b>{fmt_num(entregues)} foram entregues ({fmt_pct(pct_entregues, 1)})</b>, '
         f'sendo <b>{fmt_num(no_prazo)} no prazo ({fmt_pct(pct_prazo, 1)})</b>.'
     )
-elif canal_sel == "NÃ£o LogÃ­stico":
+elif canal_sel == "Não Logístico":
     resumo = (
-        f'Exibindo apenas os <b>{fmt_num(total_ped)} pedidos comerciais sem movimentaÃ§Ã£o logÃ­stica</b>. '
-        f'Estes pedidos existem no sistema comercial mas <b>nÃ£o geraram expediÃ§Ã£o na gb.log</b>. '
-        f'As seÃ§Ãµes de entregas, TAT e motoristas nÃ£o se aplicam a este canal.'
+        f'Exibindo apenas os <b>{fmt_num(total_ped)} pedidos comerciais sem movimentação logística</b>. '
+        f'Estes pedidos existem no sistema comercial mas <b>não geraram expedição na gb.log</b>. '
+        f'As seções de entregas, TAT e motoristas não se aplicam a este canal.'
     )
 elif canal_sel == "Omnichannel":
     resumo = (
         f'Exibindo apenas os <b>{fmt_num(total_ped)} pedidos Omnichannel</b>. '
-        f'Desses, <b>{fmt_num(n_join)} ({fmt_pct(pct_log, 1)}) geraram expediÃ§Ã£o logÃ­stica</b>. ' +
+        f'Desses, <b>{fmt_num(n_join)} ({fmt_pct(pct_log, 1)}) geraram expedição logística</b>. ' +
         (
             f'Das <b>{fmt_num(total_log)} remessas</b>, <b>{fmt_num(entregues)} foram entregues ({fmt_pct(pct_entregues, 1)})</b>, '
             f'sendo <b>{fmt_num(no_prazo)} no prazo ({fmt_pct(pct_prazo, 1)})</b>.'
             if total_log > 0
-            else 'Nenhum pedido Omnichannel gerou expediÃ§Ã£o logÃ­stica no perÃ­odo selecionado.'
+            else 'Nenhum pedido Omnichannel gerou expedição logística no período selecionado.'
         )
     )
-else:  # LogÃ­stico
+else:  # Logístico
     resumo = (
-        f'Exibindo apenas os <b>{fmt_num(total_ped)} pedidos com expediÃ§Ã£o logÃ­stica</b>. '
+        f'Exibindo apenas os <b>{fmt_num(total_ped)} pedidos com expedição logística</b>. '
         f'Das <b>{fmt_num(total_log)} remessas</b>, <b>{fmt_num(entregues)} foram entregues ({fmt_pct(pct_entregues, 1)})</b>, '
         f'sendo <b>{fmt_num(no_prazo)} no prazo ({fmt_pct(pct_prazo, 1)})</b>. '
-        f'Custo mÃ©dio: <b>{fmt_brl(custo_por_pedido)}/pedido</b>.'
+        f'Custo médio: <b>{fmt_brl(custo_por_pedido)}/pedido</b>.'
     )
 
 st.markdown(f'<div class="narrativa">{resumo}</div>', unsafe_allow_html=True)
 st.markdown(
     f'<div class="narrativa">'
     f'<b>Metas aplicadas ({meta_label}):</b> '
-    f'Entregues â‰¥ <b>{fmt_pct(meta_entrega,0)}</b> Â· '
-    f'Entregues no prazo â‰¥ <b>{fmt_pct(meta_prazo,0)}</b> Â· '
-    f'Custo mÃ©dio &lt; <b>{fmt_brl(META_CUSTO_MEDIO)}</b> '
+    f'Entregues ≥ <b>{fmt_pct(meta_entrega,0)}</b> · '
+    f'Entregues no prazo ≥ <b>{fmt_pct(meta_prazo,0)}</b> · '
+    f'Custo médio &lt; <b>{fmt_brl(META_CUSTO_MEDIO)}</b> '
     f'(<span style="color:{cor_custo};font-weight:700">{status_custo_txt}</span>).'
     f'</div>',
     unsafe_allow_html=True,
 )
 
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-# SEÃ‡ÃƒO 1 â€” FUNIL
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-st.markdown('<p class="secao">ðŸ”­ VISÃƒO GERAL â€” Funil de pedidos</p>', unsafe_allow_html=True)
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+st.markdown('<p class="secao">🔭 VISÃO GERAL — Funil de pedidos</p>', unsafe_allow_html=True)
 st.markdown(BADGE_BOTH, unsafe_allow_html=True)
 
 f1, f2, f3, f4, f5 = st.columns(5)
 f1.metric("Pedidos Comerciais",     fmt_num(total_ped))
-f2.metric("Roteados Ã  LogÃ­stica",   fmt_num(n_join),
-          delta=f"{fmt_pct(pct_log, 1)} do total" if total_ped else "â€“")
-f3.metric("Sem MovimentaÃ§Ã£o Log.",  fmt_num(sem_log),
-          delta=f"{fmt_pct(100-pct_log, 1)} do total" if total_ped else "â€“", delta_color="off")
-f4.metric("Custo MÃ©dio / Pedido",   fmt_brl(custo_por_pedido) if total_log else "â€“",
-          delta=f"Meta < {fmt_brl(META_CUSTO_MEDIO)} | {status_custo_txt}" if total_log else "â€“",
+f2.metric("Roteados à Logística",   fmt_num(n_join),
+          delta=f"{fmt_pct(pct_log, 1)} do total" if total_ped else "–")
+f3.metric("Sem Movimentação Log.",  fmt_num(sem_log),
+          delta=f"{fmt_pct(100-pct_log, 1)} do total" if total_ped else "–", delta_color="off")
+f4.metric("Custo Médio / Pedido",   fmt_brl(custo_por_pedido) if total_log else "–",
+          delta=f"Meta < {fmt_brl(META_CUSTO_MEDIO)} | {status_custo_txt}" if total_log else "–",
           delta_color="normal" if custo_por_pedido < META_CUSTO_MEDIO else "inverse")
-f5.metric("PDVs Ativos", "7 comerciais Â· 6 logÃ­stica",
-          help="PDV 24117 sÃ³ aparece no sistema comercial â€” sem entregas no perÃ­odo")
+f5.metric("PDVs Ativos", "7 comerciais · 6 logística",
+          help="PDV 24117 só aparece no sistema comercial — sem entregas no período")
 
 col_meio = COLS["meio"]
 col_tp   = COLS["tp_ent"]
@@ -520,8 +533,8 @@ col_tp   = COLS["tp_ent"]
 c_esq, c_dir = st.columns([1.4, 0.7])
 
 with c_esq:
-    if canal_sel in ("Todos", "LogÃ­stico"):
-        # GrÃ¡fico PDV: comercial vs logÃ­stico
+    if canal_sel in ("Todos", "Logístico"):
+        # Gráfico PDV: comercial vs logístico
         pdv_com = (df_ped_f[df_ped_f["PDV_Ped"].isin(TODOS_PDVS)]
                      .groupby("PDV_Ped").size().reset_index(name="Comercial"))
         pdv_log_all = dj_v.groupby("PDV_Ped").size().reset_index(name="Logistica")
@@ -532,14 +545,14 @@ with c_esq:
 
         fig = go.Figure()
         fig.add_trace(go.Bar(
-            name="Roteado Ã  LogÃ­stica",
+            name="Roteado à Logística",
             y=pdv_overview["PDV_Ped"], x=pdv_overview["Logistica"],
             orientation="h", marker_color=COR_OK,
             text=pdv_overview["Logistica"].apply(fmt_num),
             textposition="inside", textfont_size=11,
         ))
         fig.add_trace(go.Bar(
-            name="Sem MovimentaÃ§Ã£o LogÃ­stica",
+            name="Sem Movimentação Logística",
             y=pdv_overview["PDV_Ped"], x=pdv_overview["SemLogistica"],
             orientation="h", marker_color=COR_CINZA,
             text=pdv_overview["SemLogistica"].apply(fmt_num),
@@ -549,11 +562,11 @@ with c_esq:
         if len(p24) > 0:
             fig.add_annotation(
                 x=int(p24["Comercial"].values[0]) + 30, y="PDV 24117",
-                text="âš ï¸ sem logÃ­stica", showarrow=False,
+                text="sem logistica", showarrow=False,
                 font=dict(color=COR_WARN, size=11), xanchor="left",
             )
         fig.update_layout(**layout_br(
-            title="Pedidos por Canal (PDV) â€” Comercial vs LogÃ­stica",
+            title="Pedidos por Canal (PDV) — Comercial vs Logística",
             barmode="stack", height=380,
             margin=dict(t=55,b=10,l=10,r=20),
             legend=dict(orientation="h", y=-0.1),
@@ -562,13 +575,13 @@ with c_esq:
         st.markdown(BADGE_BOTH, unsafe_allow_html=True)
         st.plotly_chart(fig, use_container_width=True)
     else:
-        # Para Omnichannel / NÃ£o LogÃ­stico: breakdown por meio de captaÃ§Ã£o
+        # Para Omnichannel / Não Logístico: breakdown por meio de captação
         if col_meio:
             meio_f = df_ped_f[col_meio].value_counts().reset_index()
             meio_f.columns = ["Canal","Qtd"]
             meio_f["RotuloQtd"] = meio_f["Qtd"].apply(fmt_num)
             fig_m = px.bar(meio_f.sort_values("Qtd"), x="Qtd", y="Canal", orientation="h",
-                           title=f"Pedidos por Meio de CaptaÃ§Ã£o â€” {canal_sel}",
+                           title=f"Pedidos por Meio de Captação — {canal_sel}",
                            color_discrete_sequence=[COR_NEU], text="RotuloQtd")
             fig_m.update_traces(textposition="outside")
             fig_m.update_layout(**layout_br(height=380, margin=dict(t=55,b=10,l=10,r=10),
@@ -581,7 +594,7 @@ with c_dir:
         meio_cnt = df_ped_f[col_meio].value_counts().reset_index()
         meio_cnt.columns = ["Canal","Qtd"]
         fig_m = px.pie(meio_cnt, values="Qtd", names="Canal",
-                       title=f"Meio de CaptaÃ§Ã£o<br><sup>ðŸ›’ {fmt_num(total_ped)} pedidos</sup>",
+                       title=f"Meio de Captação<br><sup>🛒 {fmt_num(total_ped)} pedidos</sup>",
                        hole=0.50, color_discrete_sequence=px.colors.qualitative.Safe)
         fig_m.update_traces(textinfo="percent+label", textfont_size=11)
         fig_m.update_layout(**layout_br(height=360, margin=dict(t=65,b=10,l=10,r=10), showlegend=False))
@@ -598,65 +611,76 @@ with c_dir:
                                         yaxis_title="", xaxis_title="Pedidos"))
         st.plotly_chart(fig_t, use_container_width=True)
 
-if canal_sel == "NÃ£o LogÃ­stico":
+if canal_sel == "Não Logístico":
     st.info(
-        f"ðŸ“Œ Os {fmt_num(total_ped)} pedidos 'NÃ£o LogÃ­sticos' existem apenas no sistema comercial. "
-        "As seÃ§Ãµes abaixo (Entregas, TAT, Motoristas) nÃ£o possuem dados para este canal."
+        f"📌 Os {fmt_num(total_ped)} pedidos 'Não Logísticos' existem apenas no sistema comercial. "
+        "As seções abaixo (Entregas, TAT, Motoristas) não possuem dados para este canal."
     )
 
 st.markdown("---")
 
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-# SEÃ‡ÃƒO 2 â€” ENTREGUES
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-st.markdown('<p class="secao">âœ… ENTREGUES â€” O que chegou, onde e por quem?</p>', unsafe_allow_html=True)
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+st.markdown('<p class="secao">✅ ENTREGUES — O que chegou, onde e por quem?</p>', unsafe_allow_html=True)
 st.markdown(BADGE_LOG, unsafe_allow_html=True)
 
 if total_log == 0:
-    st.warning(f"Nenhum pedido logÃ­stico para o canal '{canal_sel}' no perÃ­odo selecionado.")
+    st.warning(f"Nenhum pedido log?stico para o canal '{canal_sel}' no per?odo selecionado.")
 else:
     l1, l2, l3, l4 = st.columns(4)
-    l1.metric("Pedidos LogÃ­sticos",  fmt_num(total_log))
+    l1.metric("Pedidos Log?sticos",  fmt_num(total_log))
     l2.metric("Entregues",           fmt_num(entregues),
-              delta=f"{fmt_pct(pct_entregues, 1)} | meta {fmt_pct(meta_entrega,0)} ({status_entrega})" if total_log else "â€“")
+              delta=f"{fmt_pct(pct_entregues, 1)} | meta {fmt_pct(meta_entrega,0)} ({status_entrega})" if total_log else "?")
     l3.metric("No Prazo",            fmt_num(no_prazo),
-              delta=f"{fmt_pct(pct_prazo, 1)} | meta {fmt_pct(meta_prazo,0)} ({status_prazo})" if entregues else "â€“")
+              delta=f"{fmt_pct(pct_prazo, 1)} | meta {fmt_pct(meta_prazo,0)} ({status_prazo})" if entregues else "?")
     l4.metric("Fora do Prazo",       fmt_num(fora_prazo),
-              delta=f"{fmt_pct(100-pct_prazo, 1)} dos entregues" if entregues else "â€“",
+              delta=f"{fmt_pct(100-pct_prazo, 1)} dos entregues" if entregues else "?",
               delta_color="inverse")
 
     df_ent = df[df["Status"] == "Entregue"].copy()
 
     if len(df_ent) == 0:
-        st.warning("Nenhum pedido entregue no perÃ­odo selecionado.")
+        st.warning("Nenhum pedido entregue no per?odo selecionado.")
     else:
-        c1, c2, c3 = st.columns([1, 1.2, 1.8])
+        visao_ent = st.radio(
+            "Visao de entregues",
+            ["Prazo", "PDV", "Municipios", "Evolucao", "Atrasos"],
+            index=0,
+            horizontal=True,
+            key="visao_entregues",
+        )
 
-        with c1:
+        df_atraso = df_ent[df_ent["NoPrazo"] == False].copy()
+
+        if visao_ent == "Prazo":
             prazo_df = pd.DataFrame({
-                "SituaÃ§Ã£o": ["No prazo","Fora do prazo"],
+                "Situacao": ["No prazo", "Fora do prazo"],
                 "Qtd": [no_prazo, fora_prazo],
             })
-            fig = px.pie(prazo_df, values="Qtd", names="SituaÃ§Ã£o",
-                         title=f"Prazo de Entrega<br><sup>{fmt_num(entregues)} entregues</sup>",
-                         hole=0.55, color="SituaÃ§Ã£o",
-                         color_discrete_map={"No prazo": COR_OK, "Fora do prazo": COR_WARN})
+            fig = px.pie(
+                prazo_df, values="Qtd", names="Situacao",
+                title=f"Prazo de Entrega<br><sup>{fmt_num(entregues)} entregues</sup>",
+                hole=0.55, color="Situacao",
+                color_discrete_map={"No prazo": COR_OK, "Fora do prazo": COR_WARN},
+            )
             fig.update_traces(textinfo="percent+value", textfont_size=13)
-            fig.update_layout(**layout_br(height=360, margin=dict(t=65,b=10,l=10,r=10),
+            fig.update_layout(**layout_br(height=420, margin=dict(t=65,b=10,l=10,r=10),
                                           legend=dict(orientation="h", y=-0.08)))
             st.plotly_chart(fig, use_container_width=True)
 
-        with c2:
-            pdvs_log = ["PDV 22908","PDV 23868","PDV 24118","PDV 24239","PDV 24270","PDV 24341"]
+        elif visao_ent == "PDV":
+            pdvs_log = ["PDV 22908", "PDV 23868", "PDV 24118", "PDV 24239", "PDV 24270", "PDV 24341"]
             pdv_ent = df_ent.groupby("PDV").agg(
-                Total=("Pedido","count"), NoPrazo=("NoPrazo","sum"),
+                Total=("Pedido", "count"), NoPrazo=("NoPrazo", "sum"),
             ).reset_index()
             pdv_ent["ForaPrazo"] = pdv_ent["Total"] - pdv_ent["NoPrazo"]
             faltando = [p for p in pdvs_log if p not in pdv_ent["PDV"].values]
             if faltando:
-                pdv_ent = pd.concat([pdv_ent,
-                    pd.DataFrame({"PDV": faltando, "Total": 0, "NoPrazo": 0, "ForaPrazo": 0})],
-                    ignore_index=True)
+                pdv_ent = pd.concat([
+                    pdv_ent,
+                    pd.DataFrame({"PDV": faltando, "Total": 0, "NoPrazo": 0, "ForaPrazo": 0}),
+                ], ignore_index=True)
             pdv_ent = pdv_ent.sort_values("Total", ascending=True)
             fig = go.Figure()
             fig.add_trace(go.Bar(
@@ -670,16 +694,15 @@ else:
                 text=pdv_ent["ForaPrazo"].apply(fmt_num), textposition="inside", textfont_size=10,
             ))
             fig.update_layout(**layout_br(
-                title="Entregues por PDV",
-                barmode="stack", height=360,
+                title="Entregues por PDV", barmode="stack", height=420,
                 margin=dict(t=55,b=10,l=10,r=10),
                 legend=dict(orientation="h", y=-0.08),
             ))
             st.plotly_chart(fig, use_container_width=True)
 
-        with c3:
+        elif visao_ent == "Municipios":
             muni_ent = df_ent.groupby("Municipio").agg(
-                Total=("Pedido","count"), NoPrazo=("NoPrazo","sum"),
+                Total=("Pedido", "count"), NoPrazo=("NoPrazo", "sum"),
             ).reset_index()
             muni_ent["PctPrazo"] = (muni_ent["NoPrazo"] / muni_ent["Total"] * 100).round(2)
             muni_ent["Rotulo"] = (
@@ -688,12 +711,14 @@ else:
             )
             muni_ent = (muni_ent.sort_values("Total", ascending=False)
                                  .head(15).sort_values("Total", ascending=True))
-            fig = px.bar(muni_ent, x="Total", y="Municipio", orientation="h",
-                         title="Top 15 MunicÃ­pios â€” Entregas<br><sup>Cor = % no prazo Â· RÃ³tulo = pedidos + % prazo</sup>",
-                         color="PctPrazo",
-                         color_continuous_scale=[[0,"#ef4444"],[0.5,"#f59e0b"],[1,"#22c55e"]],
-                         range_color=[0,100], text="Rotulo",
-                         labels={"PctPrazo":"% Prazo","Total":"Pedidos"})
+            fig = px.bar(
+                muni_ent, x="Total", y="Municipio", orientation="h",
+                title="Top 15 Municipios - Entregas<br><sup>Cor = % no prazo | Rotulo = pedidos + % prazo</sup>",
+                color="PctPrazo",
+                color_continuous_scale=[[0, "#ef4444"], [0.5, "#f59e0b"], [1, "#22c55e"]],
+                range_color=[0, 100], text="Rotulo",
+                labels={"PctPrazo": "% Prazo", "Total": "Pedidos"},
+            )
             fig.update_traces(textposition="outside", textfont_size=11)
             fig.update_layout(**layout_br(
                 height=480, margin=dict(t=65,b=10,l=10,r=170), yaxis_title="",
@@ -701,54 +726,57 @@ else:
             ))
             st.plotly_chart(fig, use_container_width=True)
 
-        df_ent["Dia"] = df_ent["_efetuada"].dt.date
-        evol = df_ent.groupby(["Dia","NoPrazo"]).size().reset_index(name="Qtd")
-        evol["SituaÃ§Ã£o"] = evol["NoPrazo"].map({True:"No prazo", False:"Fora do prazo"})
-        evol["RotuloQtd"] = evol["Qtd"].apply(fmt_num)
-        fig_evol = px.bar(evol, x="Dia", y="Qtd", color="SituaÃ§Ã£o",
-                          title="EvoluÃ§Ã£o DiÃ¡ria de Entregas",
-                          barmode="stack",
-                          color_discrete_map={"No prazo": COR_OK, "Fora do prazo": COR_WARN},
-                          text="RotuloQtd")
-        fig_evol.update_layout(**layout_br(
-            height=300, margin=dict(t=55,b=10,l=10,r=10),
-            xaxis_title="", yaxis_title="Pedidos entregues",
-            legend=dict(orientation="h", y=1.12, x=0),
-        ))
-        st.plotly_chart(fig_evol, use_container_width=True)
-
-        df_atraso = df_ent[df_ent["NoPrazo"] == False].copy()
-        if len(df_atraso) > 0:
-            render_excecoes_pivot(
-                preparar_excecoes(df_atraso),
-                titulo=f"Entregues com atraso - tabela dinamica ({fmt_num(len(df_atraso))} pedidos)",
-                dias_label="Dias de atraso",
-                key_prefix="atraso",
+        elif visao_ent == "Evolucao":
+            df_ent["Dia"] = df_ent["_efetuada"].dt.date
+            evol = df_ent.groupby(["Dia", "NoPrazo"]).size().reset_index(name="Qtd")
+            evol["Situacao"] = evol["NoPrazo"].map({True: "No prazo", False: "Fora do prazo"})
+            evol["RotuloQtd"] = evol["Qtd"].apply(fmt_num)
+            fig_evol = px.bar(
+                evol, x="Dia", y="Qtd", color="Situacao",
+                title="Evolucao diaria de entregas", barmode="stack",
+                color_discrete_map={"No prazo": COR_OK, "Fora do prazo": COR_WARN},
+                text="RotuloQtd",
             )
+            fig_evol.update_layout(**layout_br(
+                height=420, margin=dict(t=55,b=10,l=10,r=10),
+                xaxis_title="", yaxis_title="Pedidos entregues",
+                legend=dict(orientation="h", y=1.12, x=0),
+            ))
+            st.plotly_chart(fig_evol, use_container_width=True)
 
+        elif visao_ent == "Atrasos":
+            if len(df_atraso) > 0:
+                render_excecoes_pivot(
+                    preparar_excecoes(df_atraso),
+                    titulo=f"Entregues com atraso - tabela dinamica ({fmt_num(len(df_atraso))} pedidos)",
+                    dias_label="Dias de atraso",
+                    key_prefix="atraso",
+                )
+            else:
+                st.success("Nao ha entregues com atraso no filtro atual.")
 st.markdown("---")
 
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-# SEÃ‡ÃƒO 3 â€” NÃƒO ENTREGUES
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-st.markdown('<p class="secao">âš ï¸ NÃƒO ENTREGUES â€” PendÃªncias, devoluÃ§Ãµes e falhas</p>', unsafe_allow_html=True)
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+st.markdown('<p class="secao">NAO ENTREGUES - Pendencias, devolucoes e falhas</p>', unsafe_allow_html=True)
 st.markdown(BADGE_LOG, unsafe_allow_html=True)
 
 if total_log == 0:
-    st.info(f"Sem dados logÃ­sticos para o canal '{canal_sel}'.")
+    st.info(f"Sem dados logísticos para o canal '{canal_sel}'.")
 else:
     df_nent = df[df["Status"] != "Entregue"].copy()
     n_nent  = len(df_nent)
 
     if n_nent == 0:
-        st.success("Todos os pedidos do perÃ­odo foram entregues.")
+        st.success("Todos os pedidos do período foram entregues.")
     else:
         motivo_top = df_nent["Status"].value_counts()
         st.markdown(
             f'<div class="narrativa-warn">'
-            f'<b>{fmt_num(n_nent)} pedidos ({fmt_pct(n_nent/total_log*100, 1)} do total logÃ­stico)</b> nÃ£o foram entregues. '
-            f'Principal motivo: "<b>{motivo_top.index[0]}</b>" ({fmt_num(int(motivo_top.iloc[0]))} ocorrÃªncias). '
-            f'<b>{fmt_num(devolvidos)} devoluÃ§Ãµes</b> e <b>{fmt_num(fora_prazo)} entregas fora do prazo</b>.'
+            f'<b>{fmt_num(n_nent)} pedidos ({fmt_pct(n_nent/total_log*100, 1)} do total logístico)</b> não foram entregues. '
+            f'Principal motivo: "<b>{motivo_top.index[0]}</b>" ({fmt_num(int(motivo_top.iloc[0]))} ocorrências). '
+            f'<b>{fmt_num(devolvidos)} devoluções</b> e <b>{fmt_num(fora_prazo)} entregas fora do prazo</b>.'
             f'</div>', unsafe_allow_html=True
         )
 
@@ -756,10 +784,10 @@ else:
         n_aberto = int(df_nent[df_nent["Status"].isin(["Em transito","Aguardando geracao de rota","Aguardando motorista"])].shape[0])
         n_ausente= int(df_nent[df_nent["Status"].isin(["Destinatario ausente","Nao visitado"])].shape[0])
         n_falha  = int(df_nent[df_nent["Status"].isin(["Endereco nao localizado","Carga recusada pelo destinatario","Destinatario mudou de endereco","Estabelecimento fechado"])].shape[0])
-        ka.metric("Em TrÃ¢nsito / Aguardando",   fmt_num(n_aberto))
-        kb.metric("DestinatÃ¡rio Ausente",        fmt_num(n_ausente))
-        kc.metric("Falha de EndereÃ§o / Recusa",  fmt_num(n_falha))
-        kd.metric("ðŸ”´ Devolvidos",              fmt_num(devolvidos),
+        ka.metric("Em Trânsito / Aguardando",   fmt_num(n_aberto))
+        kb.metric("Destinatário Ausente",        fmt_num(n_ausente))
+        kc.metric("Falha de Endereço / Recusa",  fmt_num(n_falha))
+        kd.metric("🔴 Devolvidos",              fmt_num(devolvidos),
                   delta=f"{fmt_pct(taxa_dev, 2)} do total", delta_color="inverse")
 
         visao_nent = st.radio(
@@ -830,8 +858,8 @@ else:
         if col_msg: cols_t.append(col_msg)
         df_tab  = df_nent[[c for c in cols_t if c in df_nent.columns]].copy()
         df_tab["_prazo"] = df_tab["_prazo"].dt.date
-        ren = {"Municipio":"MunicÃ­pio","_prazo":"Prazo"}
-        if col_ult: ren[col_ult] = "OcorrÃªncia"
+        ren = {"Municipio":"Município","_prazo":"Prazo"}
+        if col_ult: ren[col_ult] = "Ocorrência"
         if col_msg: ren[col_msg] = "Mensagem"
         # A tabela simples foi substituida pela visao dinamica abaixo.
         # Tabela simples removida; o drill-down abaixo substitui esta visao.
@@ -846,14 +874,16 @@ else:
 
 st.markdown("---")
 
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-# SEÃ‡ÃƒO 4 â€” TAT
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-st.markdown('<p class="secao">â±ï¸ TEMPO DE ATENDIMENTO (TAT) â€” Da aprovaÃ§Ã£o Ã  entrega</p>', unsafe_allow_html=True)
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+st.markdown('<p class="secao">TEMPO DE ATENDIMENTO (TAT) - Da aprovacao a entrega</p>', unsafe_allow_html=True)
 st.markdown(BADGE_LOG, unsafe_allow_html=True)
+if tat_invalidos:
+    st.caption(f"{fmt_num(tat_invalidos)} registro(s) com TAT negativo foram desconsiderados das medias.")
 
 if total_log == 0:
-    st.info(f"Sem dados logÃ­sticos para o canal '{canal_sel}'.")
+    st.info(f"Sem dados logísticos para o canal '{canal_sel}'.")
 else:
     df_tat = df[(df["Status"]=="Entregue") & df["TAT_dias"].between(0,30)].copy()
 
@@ -866,12 +896,12 @@ else:
         tat_np = tat_np if pd.notna(tat_np) else 0.0
         tat_fp = tat_fp if pd.notna(tat_fp) else 0.0
         st.markdown(
-            f'<div class="narrativa">TAT mÃ©dio geral: <b>{fmt_num(tat_med, 1)} dias</b>. '
-            f'Meta: <b>2 dias Itabuna / 3 dias fora</b> Â· '
+            f'<div class="narrativa">TAT médio geral: <b>{fmt_num(tat_med, 1)} dias</b>. '
+            f'Meta: <b>2 dias Itabuna / 3 dias fora</b> · '
             f'Dentro da meta: <b>{fmt_pct(pct_tat_ok, 1)}</b>. '
-            f'No prazo: <b>{fmt_num(tat_np, 1)} dias</b> Â· '
+            f'No prazo: <b>{fmt_num(tat_np, 1)} dias</b> · '
             f'Fora do prazo: <b>{fmt_num(tat_fp, 1)} dias</b> '
-            f'(diferenÃ§a de <b>{fmt_num(abs(tat_fp-tat_np), 1)} dia(s)</b>).</div>',
+            f'(diferença de <b>{fmt_num(abs(tat_fp-tat_np), 1)} dia(s)</b>).</div>',
             unsafe_allow_html=True
         )
 
@@ -882,10 +912,10 @@ else:
                                color="NoPrazo",
                                color_discrete_map={True: COR_OK, False: COR_WARN},
                                barmode="overlay", opacity=0.8,
-                               title="DistribuiÃ§Ã£o do TAT",
+                               title="Distribuição do TAT",
                                labels={"TAT_dias":"Dias","NoPrazo":"No prazo?"})
             fig.add_vline(x=tat_med, line_dash="dash", line_color="#f1f5f9",
-                          annotation_text=f"MÃ©dia {fmt_num(tat_med,1)}d",
+                          annotation_text=f"Média {fmt_num(tat_med,1)}d",
                           annotation_position="top right",
                           annotation_font_color="#f1f5f9")
             fig.update_layout(**layout_br(height=360, margin=dict(t=55,b=10,l=10,r=10),
@@ -909,7 +939,7 @@ else:
                                  arrayminus=[r["Media"]-r["P25"]], visible=True),
                 ))
             fig2.update_layout(**layout_br(
-                title="TAT MÃ©dio por PDV",
+                title="TAT Médio por PDV",
                 height=360, margin=dict(t=55,b=10,l=10,r=10),
                 yaxis_title="Dias", xaxis_title="",
             ))
@@ -917,21 +947,26 @@ else:
 
 st.markdown("---")
 
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-# SEÃ‡ÃƒO 5 â€” MOTORISTAS
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-st.markdown('<p class="secao">ðŸšš MOTORISTAS â€” Desempenho individual de cada entregador</p>', unsafe_allow_html=True)
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+st.markdown('<p class="secao">🚚 MOTORISTAS — Desempenho individual de cada entregador</p>', unsafe_allow_html=True)
 st.markdown(BADGE_LOG, unsafe_allow_html=True)
+if tp_invalidos or te_invalidos:
+    st.caption(
+        f"{fmt_num(tp_invalidos)} TP negativo(s) e {fmt_num(te_invalidos)} TE negativo(s) "
+        "foram desconsiderados das medias."
+    )
 
 if total_log == 0:
-    st.info(f"Sem dados logÃ­sticos para o canal '{canal_sel}'.")
+    st.info(f"Sem dados logísticos para o canal '{canal_sel}'.")
 else:
     col_mot = find_col(dj, "Motorista") or find_col(df, "Motorista")
     df_mot_base = dj.copy() if len(dj) else df.copy()
     for col_tempo in ["TP_dias", "TE_dias"]:
         if col_tempo not in df_mot_base.columns:
             df_mot_base[col_tempo] = pd.NA
-    df_mot_base["Motorista"] = df_mot_base[col_mot].fillna("Sem motorista atribuÃ­do") if col_mot else "N/D"
+    df_mot_base["Motorista"] = df_mot_base[col_mot].fillna("Sem motorista atribuído") if col_mot else "N/D"
     df_mot_base["MetaTP"] = df_mot_base["Municipio"].apply(lambda x: meta_tempo_por_municipio(x, tipo="tp"))
     df_mot_base["MetaTE"] = df_mot_base["Municipio"].apply(lambda x: meta_tempo_por_municipio(x, tipo="te"))
     df_mot_base["TP_OK"] = df_mot_base["TP_dias"].between(0, 30) & (df_mot_base["TP_dias"] <= df_mot_base["MetaTP"]) if "TP_dias" in df_mot_base.columns else False
@@ -957,8 +992,8 @@ else:
     mot["TE_med"]     = mot["TE_med"].round(2)
     mot["PctTP"]      = (mot["TP_OK"] / mot["Total"].replace(0, 1) * 100).round(2)
     mot["PctTE"]      = (mot["TE_OK"] / mot["Entregues"].replace(0, 1) * 100).round(2)
-    mot_ativos = mot[mot["Motorista"] != "Sem motorista atribuÃ­do"].sort_values("Total", ascending=False)
-    n_sem_mot  = int(mot.loc[mot["Motorista"] == "Sem motorista atribuÃ­do", "Total"].sum())
+    mot_ativos = mot[mot["Motorista"] != "Sem motorista atribuído"].sort_values("Total", ascending=False)
+    n_sem_mot  = int(mot.loc[mot["Motorista"] == "Sem motorista atribuído", "Total"].sum())
 
     alertas = []
     for _, r in mot_ativos.iterrows():
@@ -969,18 +1004,18 @@ else:
 
     narrativa_mot = (
         f"<b>{fmt_num(mot_ativos['Motorista'].nunique())} motoristas</b> ativos, "
-        f"responsÃ¡veis por <b>{fmt_num(int(mot_ativos['Total'].sum()))} pedidos</b>. "
-        f"<b>{fmt_num(n_sem_mot)} pedidos</b> sem motorista atribuÃ­do. "
+        f"responsáveis por <b>{fmt_num(int(mot_ativos['Total'].sum()))} pedidos</b>. "
+        f"<b>{fmt_num(n_sem_mot)} pedidos</b> sem motorista atribuído. "
         f"Custo rateado: <b>{fmt_brl(custo_por_pedido)}/pedido</b>."
     )
     if alertas:
-        narrativa_mot += "<br><br>ðŸ”´ <b>AtenÃ§Ã£o:</b> " + " Â· ".join(alertas)
+        narrativa_mot += "<br><br>🔴 <b>Atenção:</b> " + " · ".join(alertas)
 
     badge_cor = "narrativa-warn" if alertas else "narrativa"
     st.markdown(f'<div class="{badge_cor}">{narrativa_mot}</div>', unsafe_allow_html=True)
 
     visao_mot = st.radio(
-        "VisÃ£o dos motoristas",
+        "Visão dos motoristas",
         ["Volume / status", "% no prazo", "TP", "TE", "Tabela"],
         index=0,
         horizontal=True,
@@ -988,7 +1023,7 @@ else:
     )
 
     if visao_mot == "Volume / status":
-        status_mot = (df_mot_base[df_mot_base["Motorista"] != "Sem motorista atribuÃ­do"]
+        status_mot = (df_mot_base[df_mot_base["Motorista"] != "Sem motorista atribuído"]
                       .groupby(["Motorista","Status"]).size().reset_index(name="Qtd"))
         status_mot = ordenar_stack(status_mot, "Motorista", "Status", "Qtd")
         ordem_m = (status_mot.groupby("Motorista")["Qtd"].sum()
@@ -1027,16 +1062,16 @@ else:
     elif visao_mot in ("TP", "TE"):
         col_tempo = "TP_med" if visao_mot == "TP" else "TE_med"
         col_pct = "PctTP" if visao_mot == "TP" else "PctTE"
-        titulo = "TP - aprovaÃ§Ã£o atÃ© faturamento" if visao_mot == "TP" else "TE - coleta BG atÃ© entrega"
+        titulo = "TP - aprovação até faturamento" if visao_mot == "TP" else "TE - coleta BG até entrega"
         dados = mot_ativos.sort_values(col_tempo, ascending=True).copy()
         cores = [COR_ERR if v > 2 else COR_WARN if v > 1 else COR_OK for v in dados[col_tempo].fillna(99)]
         fig = go.Figure(go.Bar(
             x=dados[col_tempo], y=dados["Motorista"], orientation="h",
             marker_color=cores,
-            text=dados[col_tempo].apply(lambda x: "â€”" if pd.isna(x) else f"{fmt_num(x,1)}d"),
+            text=dados[col_tempo].apply(lambda x: "—" if pd.isna(x) else f"{fmt_num(x,1)}d"),
             textposition="outside",
             customdata=dados[col_pct],
-            hovertemplate="%{y}<br>MÃ©dia: %{x:.2f} dias<br>Dentro da meta: %{customdata:.1f}%<extra></extra>",
+            hovertemplate="%{y}<br>Média: %{x:.2f} dias<br>Dentro da meta: %{customdata:.1f}%<extra></extra>",
         ))
         fig.add_vline(x=1, line_dash="dash", line_color=COR_OK,
                       annotation_text="Meta Itabuna 1d", annotation_font_color=COR_OK)
@@ -1058,7 +1093,7 @@ else:
         "NoPrazo":"No Prazo","PctPrazo":"% Prazo","ForaPrazo":"Fora Prazo",
         "TP_med":"TP Medio (d)","PctTP":"% TP Meta",
         "TE_med":"TE Medio (d)","PctTE":"% TE Meta",
-        "TAT_med":"TAT MÃ©dio (d)","Ocorrencias":"OcorrÃªncias",
+        "TAT_med":"TAT Médio (d)","Ocorrencias":"Ocorrências",
     }).reset_index(drop=True)
 
     st.dataframe(
@@ -1075,14 +1110,14 @@ else:
                 "% TP Meta":      lambda x: fmt_pct(x, 2),
                 "TE Medio (d)":   lambda x: fmt_num(x, 2),
                 "% TE Meta":      lambda x: fmt_pct(x, 2),
-                "TAT MÃ©dio (d)": lambda x: fmt_num(x, 2),
-                "OcorrÃªncias":   lambda x: fmt_num(x),
+                "TAT Médio (d)": lambda x: fmt_num(x, 2),
+                "Ocorrências":   lambda x: fmt_num(x),
             })
             .background_gradient(subset=["% Prazo"],       cmap="RdYlGn", vmin=0,  vmax=100)
             .background_gradient(subset=["% Entrega"],     cmap="RdYlGn", vmin=80, vmax=100)
             .background_gradient(subset=["% TP Meta"],     cmap="RdYlGn", vmin=0,  vmax=100)
             .background_gradient(subset=["% TE Meta"],     cmap="RdYlGn", vmin=0,  vmax=100)
-            .background_gradient(subset=["TAT MÃ©dio (d)"], cmap="RdYlGn_r", vmin=1, vmax=7)
+            .background_gradient(subset=["TAT Médio (d)"], cmap="RdYlGn_r", vmin=1, vmax=7)
             .background_gradient(subset=["TP Medio (d)"],  cmap="RdYlGn_r", vmin=1, vmax=5)
             .background_gradient(subset=["TE Medio (d)"],  cmap="RdYlGn_r", vmin=1, vmax=5),
         use_container_width=True, height=320,
@@ -1135,17 +1170,17 @@ else:
     )
 
     if n_sem_mot > 0:
-        st.caption(f"âš ï¸ {fmt_num(n_sem_mot)} pedidos sem motorista atribuÃ­do excluÃ­dos da tabela.")
+        st.caption(f"Atencao: {fmt_num(n_sem_mot)} pedidos sem motorista atribuido excluidos da tabela.")
 
 st.markdown("---")
 
 if total_log > 0:
     st.warning(
-        f"âš ï¸ **Coluna 'Valor do frete' com entrada incorreta:** "
+        f"Atencao: **Coluna 'Valor do frete' com entrada incorreta:** "
         f"{fmt_num(n_informados)} de {fmt_num(total_log)} pedidos "
-        f"({fmt_pct(pct_informado, 1)}) tÃªm valor registrado. "
+        f"({fmt_pct(pct_informado, 1)}) têm valor registrado. "
         f"O custo exibido usa o total pago a motoristas ({fmt_brl(CUSTO_TOTAL_MOTORISTAS)}) rateado igualmente. "
-        f"**AÃ§Ã£o necessÃ¡ria:** corrigir o lanÃ§amento do frete na plataforma logÃ­stica."
+        f"**Ação necessária:** corrigir o lançamento do frete na plataforma logística."
     )
 
-st.caption("ðŸ“¦ LogÃ­stica = GB.Log Â· ðŸ›’ Pedidos = Sistema Comercial Â· ðŸ”— Cruzamento por CodigoPedido Â· 2026-07-03")
+st.caption("📦 Logística = GB.Log · 🛒 Pedidos = Sistema Comercial · 🔗 Cruzamento por CodigoPedido · 2026-07-03")
