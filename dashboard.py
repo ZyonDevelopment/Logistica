@@ -1172,25 +1172,46 @@ else:
         status_mot = (df_mot_base[df_mot_base["Motorista"] != "Sem motorista atribuído"]
                       .groupby(["Motorista","Status"]).size().reset_index(name="Qtd"))
         status_mot = ordenar_stack(status_mot, "Motorista", "Status", "Qtd")
-        ordem_m = (status_mot.groupby("Motorista")["Qtd"].sum()
-                              .sort_values(ascending=True).index.tolist())
-        status_mot["RotuloQtd"] = status_mot["Qtd"].apply(lambda x: fmt_num(x) if x > 0 else "")
+        total_mot_status = (
+            status_mot.groupby("Motorista")
+            .agg(Total=("Qtd", "sum"))
+            .reset_index()
+        )
+        detalhes_status = (
+            status_mot[status_mot["Qtd"] > 0]
+            .assign(Detalhe=lambda d: d["Status"].astype(str) + ": " + d["Qtd"].apply(fmt_num))
+            .groupby("Motorista")["Detalhe"]
+            .apply(lambda x: "<br>".join(x))
+            .reset_index(name="DetalheHover")
+        )
+        total_mot_status = total_mot_status.merge(detalhes_status, on="Motorista", how="left")
+        total_mot_status["RotuloTotal"] = total_mot_status["Total"].apply(fmt_num)
+        ordem_m = total_mot_status.sort_values("Total", ascending=True)["Motorista"].tolist()
+        status_mot = status_mot.merge(total_mot_status, on="Motorista", how="left")
         fig = px.bar(status_mot, x="Qtd", y="Motorista", color="Status",
                      orientation="h", barmode="stack",
                      title="Status por Motorista",
-                     color_discrete_map=STATUS_CORES, text="RotuloQtd",
+                     color_discrete_map=STATUS_CORES,
+                     custom_data=["Total", "DetalheHover"],
                      category_orders={"Motorista": ordem_m[::-1], "Status": ORDEM_STACK})
+        fig.update_traces(
+            hovertemplate=(
+                "<b>%{y}</b><br>"
+                "Total: %{customdata[0]}<br><br>"
+                "%{customdata[1]}<extra></extra>"
+            ),
+            text=None,
+        )
         fig.update_layout(**layout_br(height=420, margin=dict(t=55,b=10,l=10,r=10),
                                       xaxis_title="Pedidos", yaxis_title="",
                                       legend=dict(orientation="h", y=-0.2, x=0)))
-        add_stacked_hbar_label_boxes(
+        add_hbar_label_boxes(
             fig,
-            status_mot,
-            group_col="Motorista",
-            stack_col="Status",
-            value_col="Qtd",
-            text_col="RotuloQtd",
-            stack_order=ORDEM_STACK,
+            total_mot_status,
+            y_col="Motorista",
+            x_col="Total",
+            text_col="RotuloTotal",
+            xanchor="left",
         )
         st.plotly_chart(fig, use_container_width=True)
 
