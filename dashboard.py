@@ -123,6 +123,21 @@ def status_meta_pct(valor, meta):
 def status_custo(valor):
     return ("OK", COR_OK) if valor < META_CUSTO_MEDIO else ("Preocupante", COR_WARN)
 
+def cor_por_meta(valor, meta):
+    return COR_OK if valor >= meta else COR_ERR
+
+def texto_cor_por_meta(valor, meta):
+    return "#f8fafc" if valor >= meta else "#fee2e2"
+
+def estilo_pct_meta(v, meta):
+    try:
+        valor = float(v)
+    except Exception:
+        return ""
+    if valor >= meta:
+        return "background-color: rgba(34,197,94,.22); color: #dcfce7; font-weight: 700;"
+    return "background-color: rgba(239,68,68,.34); color: #fee2e2; font-weight: 700;"
+
 def eh_itabuna(v):
     return str(v or "").strip().lower() == "itabuna"
 
@@ -742,17 +757,19 @@ else:
                 Total=("Pedido", "count"), NoPrazo=("NoPrazo", "sum"),
             ).reset_index()
             pdv_ent["ForaPrazo"] = pdv_ent["Total"] - pdv_ent["NoPrazo"]
+            pdv_ent["PctPrazo"] = (pdv_ent["NoPrazo"] / pdv_ent["Total"].replace(0, 1) * 100).round(2)
             faltando = [p for p in pdvs_log if p not in pdv_ent["PDV"].values]
             if faltando:
                 pdv_ent = pd.concat([
                     pdv_ent,
                     pd.DataFrame({"PDV": faltando, "Total": 0, "NoPrazo": 0, "ForaPrazo": 0}),
                 ], ignore_index=True)
+                pdv_ent["PctPrazo"] = (pdv_ent["NoPrazo"] / pdv_ent["Total"].replace(0, 1) * 100).round(2)
             pdv_ent = pdv_ent.sort_values("Total", ascending=True)
             fig = go.Figure()
             fig.add_trace(go.Bar(
                 name="No prazo", y=pdv_ent["PDV"], x=pdv_ent["NoPrazo"],
-                orientation="h", marker_color=COR_OK,
+                orientation="h", marker_color=pdv_ent["PctPrazo"].apply(lambda x: cor_por_meta(x, meta_prazo)),
                 text=pdv_ent["NoPrazo"].apply(fmt_num), textposition="inside", textfont_size=10,
             ))
             fig.add_trace(go.Bar(
@@ -765,7 +782,7 @@ else:
                 margin=dict(t=55,b=10,l=10,r=10),
                 legend=dict(orientation="h", y=-0.08),
             ))
-            pdv_ent["RotuloNoPrazo"] = pdv_ent["NoPrazo"].apply(fmt_num)
+            pdv_ent["RotuloNoPrazo"] = pdv_ent.apply(lambda r: f"{fmt_num(r['NoPrazo'])} | {fmt_pct(r['PctPrazo'],1)}", axis=1)
             pdv_ent["RotuloForaPrazo"] = pdv_ent["ForaPrazo"].apply(fmt_num)
             pdv_ent["BaseForaPrazo"] = pdv_ent["NoPrazo"]
             add_hbar_label_boxes(fig, pdv_ent, y_col="PDV", x_col="NoPrazo", text_col="RotuloNoPrazo")
@@ -787,11 +804,10 @@ else:
             fig = px.bar(
                 muni_ent, x="Total", y="Municipio", orientation="h",
                 title="Top 15 Municipios - Entregas<br><sup>Cor = % no prazo | Rotulo = pedidos + % prazo</sup>",
-                color="PctPrazo",
-                color_continuous_scale=[[0, "#ef4444"], [0.5, "#f59e0b"], [1, "#22c55e"]],
-                range_color=[0, 100], text="Rotulo",
+                color_discrete_sequence=[COR_CINZA], text="Rotulo",
                 labels={"PctPrazo": "% Prazo", "Total": "Pedidos"},
             )
+            fig.update_traces(marker_color=muni_ent["PctPrazo"].apply(lambda x: cor_por_meta(x, meta_prazo)))
             fig.update_traces(textposition="outside", textfont_size=11)
             fig.update_layout(**layout_br(
                 height=480, margin=dict(t=65,b=10,l=10,r=170), yaxis_title="",
@@ -803,15 +819,28 @@ else:
 
         elif visao_ent == "Evolucao":
             df_ent["Dia"] = df_ent["_efetuada"].dt.date
+            prazo_dia = (df_ent.groupby("Dia")["NoPrazo"].mean() * 100).to_dict()
             evol = df_ent.groupby(["Dia", "NoPrazo"]).size().reset_index(name="Qtd")
             evol["Situacao"] = evol["NoPrazo"].map({True: "No prazo", False: "Fora do prazo"})
             evol["RotuloQtd"] = evol["Qtd"].apply(fmt_num)
+            evol["Cor"] = evol.apply(
+                lambda r: cor_por_meta(prazo_dia.get(r["Dia"], 0), meta_prazo) if r["NoPrazo"] else COR_WARN,
+                axis=1,
+            )
             fig_evol = px.bar(
                 evol, x="Dia", y="Qtd", color="Situacao",
                 title="Evolucao diaria de entregas", barmode="stack",
-                color_discrete_map={"No prazo": COR_OK, "Fora do prazo": COR_WARN},
                 text="RotuloQtd",
             )
+            for trace in fig_evol.data:
+                situacao = trace.name
+                cores = []
+                for dia in trace.x:
+                    if situacao == "No prazo":
+                        cores.append(cor_por_meta(prazo_dia.get(dia, 0), meta_prazo))
+                    else:
+                        cores.append(COR_WARN)
+                trace.marker.color = cores
             fig_evol.update_layout(**layout_br(
                 height=420, margin=dict(t=55,b=10,l=10,r=10),
                 xaxis_title="", yaxis_title="Pedidos entregues",
@@ -1138,7 +1167,7 @@ else:
 
     elif visao_mot == "% no prazo":
         mot_prazo = mot_ativos.sort_values("PctPrazo", ascending=True)
-        cores_prazo = [COR_ERR if v < meta_prazo * 0.95 else COR_WARN if v < meta_prazo else COR_OK for v in mot_prazo["PctPrazo"]]
+        cores_prazo = [cor_por_meta(v, meta_prazo) for v in mot_prazo["PctPrazo"]]
         fig = go.Figure(go.Bar(
             x=mot_prazo["PctPrazo"], y=mot_prazo["Motorista"],
             orientation="h", marker_color=cores_prazo,
@@ -1216,8 +1245,8 @@ else:
                 "TAT Médio (d)": lambda x: fmt_num(x, 2),
                 "Ocorrências":   lambda x: fmt_num(x),
             })
-            .background_gradient(subset=["% Prazo"],       cmap="RdYlGn", vmin=0,  vmax=100)
-            .background_gradient(subset=["% Entrega"],     cmap="RdYlGn", vmin=80, vmax=100)
+            .map(lambda v: estilo_pct_meta(v, meta_prazo), subset=["% Prazo"])
+            .map(lambda v: estilo_pct_meta(v, meta_entrega), subset=["% Entrega"])
             .background_gradient(subset=["% TP Meta"],     cmap="RdYlGn", vmin=0,  vmax=100)
             .background_gradient(subset=["% TE Meta"],     cmap="RdYlGn", vmin=0,  vmax=100)
             .background_gradient(subset=["TAT Médio (d)"], cmap="RdYlGn_r", vmin=1, vmax=7)
@@ -1265,8 +1294,8 @@ else:
                 "Ocorrencias":   lambda x: fmt_num(x),
                 "Custo Rateado": lambda x: fmt_brl(x),
             })
-            .background_gradient(subset=["% Prazo"],       cmap="RdYlGn", vmin=0,  vmax=100)
-            .background_gradient(subset=["% Entrega"],     cmap="RdYlGn", vmin=80, vmax=100)
+            .map(lambda v: estilo_pct_meta(v, meta_prazo), subset=["% Prazo"])
+            .map(lambda v: estilo_pct_meta(v, meta_entrega), subset=["% Entrega"])
             .background_gradient(subset=["TAT Medio (d)"], cmap="RdYlGn_r", vmin=1, vmax=7)
             .background_gradient(subset=["Custo Rateado"], cmap="YlOrRd"),
         use_container_width=True, height=260,
