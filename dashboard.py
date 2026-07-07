@@ -241,20 +241,25 @@ def preparar_resumo_tempo(df_base, *, tempo_col, meta_tipo, visao):
         return pd.DataFrame()
     base["Meta"] = base["Municipio"].apply(lambda x: meta_tempo_por_municipio(x, tipo=meta_tipo))
     base["DentroMeta"] = base[tempo_col] <= base["Meta"]
-    base["Rota"] = base["Municipio"].apply(lambda x: "Local" if eh_itabuna(x) else "Fora")
-    grupo = "Municipio" if visao == "Cidade" else "PDV"
+    if "Rota" not in base.columns:
+        base["Rota"] = base["Municipio"].apply(lambda x: "Local" if eh_itabuna(x) else "Fora")
+    if visao == "Cidade":
+        grupos = ["Municipio"]
+    else:
+        grupos = ["PDV", "Rota"]
     resumo = (
-        base.groupby(grupo)
+        base.groupby(grupos)
         .agg(
             Media=(tempo_col, "mean"),
             MetaMedia=("Meta", "mean"),
             DentroMeta=("DentroMeta", "mean"),
             Pedidos=("Pedido", "count"),
-            Rota=("Rota", lambda x: "Local" if (x == "Local").all() else ("Fora" if (x == "Fora").all() else "Misto")),
+            RotaResumo=("Rota", lambda x: "Local" if (x == "Local").all() else ("Fora" if (x == "Fora").all() else "Misto")),
         )
         .reset_index()
-        .rename(columns={grupo: "Grupo"})
     )
+    resumo["Rota"] = resumo["RotaResumo"]
+    resumo["Grupo"] = resumo["Municipio"] if visao == "Cidade" else resumo["PDV"] + " - " + resumo["Rota"]
     resumo["Media"] = resumo["Media"].round(2)
     resumo["MetaMedia"] = resumo["MetaMedia"].round(2)
     resumo["PctMeta"] = (resumo["DentroMeta"] * 100).round(1)
@@ -403,6 +408,9 @@ def carregar():
     df_log["Pedido"]    = df_log["Pedido"].astype(str).str.strip()
     col_mun = find_col(df_log, "Munic", "unicipio")
     df_log["Municipio"] = df_log[col_mun].str.title() if col_mun else ""
+    df_log["Rota"] = df_log["Municipio"].apply(lambda x: "Local" if eh_itabuna(x) else "Fora")
+    df_log["TAT_L_dias"] = df_log["TAT_dias"].where(df_log["Rota"] == "Local")
+    df_log["TAT_F_dias"] = df_log["TAT_dias"].where(df_log["Rota"] == "Fora")
     col_oc = find_col(df_log, "Ocorr")
     df_log["TemOcorr"]  = df_log[col_oc].str.strip().str.lower() == "sim" if col_oc else False
     col_oc_status = find_col(df_log, "ltima Ocorr", "Ultima Ocorr")
@@ -1080,13 +1088,17 @@ else:
 
         pct_tat_ok = tat_resumo["PctMeta"].mean() if not tat_resumo.empty else 0
         pct_tp_ok = tp_resumo["PctMeta"].mean() if not tp_resumo.empty else 0
-        tat_media = df_tat["TAT_dias"].mean() if not df_tat.empty else 0
+        tat_l_media = df_tat.loc[df_tat["Rota"] == "Local", "TAT_dias"].mean() if not df_tat.empty else 0
+        tat_f_media = df_tat.loc[df_tat["Rota"] == "Fora", "TAT_dias"].mean() if not df_tat.empty else 0
+        tat_l_txt = "sem dados" if pd.isna(tat_l_media) else f"{fmt_num(tat_l_media, 1)} dias"
+        tat_f_txt = "sem dados" if pd.isna(tat_f_media) else f"{fmt_num(tat_f_media, 1)} dias"
         tp_media = df_tp["TP_dias"].mean() if not df_tp.empty else 0
 
         st.markdown(
             f'<div class="narrativa">'
             f'<b>TAT</b> = aprovacao ate entrega; meta <b>2 dias local / 3 dias fora</b>. '
-            f'Media atual: <b>{fmt_num(tat_media, 1)} dias</b>; dentro da meta: <b>{fmt_pct(pct_tat_ok, 1)}</b>.<br>'
+            f'TAT L: <b>{tat_l_txt}</b>; TAT F: <b>{tat_f_txt}</b>; '
+            f'dentro da meta: <b>{fmt_pct(pct_tat_ok, 1)}</b>.<br>'
             f'<b>TP</b> = aprovacao ate faturamento; meta <b>1 dia local / 2 dias fora</b>. '
             f'Media atual: <b>{fmt_num(tp_media, 1)} dias</b>; dentro da meta: <b>{fmt_pct(pct_tp_ok, 1)}</b>.'
             f'</div>',
@@ -1095,9 +1107,9 @@ else:
 
         c_tat, c_tp = st.columns(2)
         with c_tat:
-            render_tempo_bar(tat_resumo, titulo=f"TAT por {visao_tempo.lower()} - meta local/fora")
+            render_tempo_bar(tat_resumo, titulo=f"TAT L/F por {visao_tempo.lower()} - meta local/fora")
         with c_tp:
-            render_tempo_bar(tp_resumo, titulo=f"TP por {visao_tempo.lower()} - meta local/fora")
+            render_tempo_bar(tp_resumo, titulo=f"TP local/fora por {visao_tempo.lower()} - meta local/fora")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
@@ -1127,7 +1139,8 @@ else:
         Entregues   = ("Status",  lambda x: (x == "Entregue").sum()),
         NoPrazo     = ("NoPrazo", "sum"),
         Devolvidos  = ("Status",  lambda x: (x == "Devolvido").sum()),
-        TAT_med     = ("TAT_dias","mean"),
+        TAT_L_med   = ("TAT_L_dias","mean"),
+        TAT_F_med   = ("TAT_F_dias","mean"),
         TE_med      = ("TE_dias", "mean"),
         TE_OK       = ("TE_OK", "sum"),
         Ocorrencias = ("TemOcorr","sum"),
@@ -1135,7 +1148,8 @@ else:
     mot["PctEntrega"] = (mot["Entregues"] / mot["Total"]                  * 100).round(2)
     mot["PctPrazo"]   = (mot["NoPrazo"]   / mot["Entregues"].replace(0,1) * 100).round(2)
     mot["ForaPrazo"]  = mot["Entregues"] - mot["NoPrazo"]
-    mot["TAT_med"]    = mot["TAT_med"].round(2)
+    mot["TAT_L_med"]  = mot["TAT_L_med"].round(2)
+    mot["TAT_F_med"]  = mot["TAT_F_med"].round(2)
     mot["TE_med"]     = mot["TE_med"].round(2)
     mot["PctTE"]      = (mot["TE_OK"] / mot["Entregues"].replace(0, 1) * 100).round(2)
     mot_ativos = mot[mot["Motorista"] != "Sem motorista atribuído"].sort_values("Total", ascending=False)
@@ -1269,12 +1283,12 @@ else:
     st.markdown("**Resumo por motorista:**")
     tabela_mot = mot_ativos[[
         "Motorista","Total","Entregues","PctEntrega","NoPrazo","PctPrazo",
-        "ForaPrazo","Devolvidos","TAT_med","TE_med","PctTE","Ocorrencias"
+        "ForaPrazo","Devolvidos","TAT_L_med","TAT_F_med","TE_med","PctTE","Ocorrencias"
     ]].rename(columns={
         "Total":"Pedidos","PctEntrega":"% Entrega",
         "NoPrazo":"No Prazo","PctPrazo":"% Prazo","ForaPrazo":"Fora Prazo",
         "TE_med":"TE Medio (d)","PctTE":"% TE Meta",
-        "TAT_med":"TAT Médio (d)","Ocorrencias":"Ocorrências",
+        "TAT_L_med":"TAT L (d)","TAT_F_med":"TAT F (d)","Ocorrencias":"Ocorrências",
     }).reset_index(drop=True)
 
     st.dataframe(
@@ -1289,13 +1303,15 @@ else:
                 "Devolvidos":    lambda x: fmt_num(x),
                 "TE Medio (d)":   lambda x: fmt_num(x, 2),
                 "% TE Meta":      lambda x: fmt_pct(x, 2),
-                "TAT Médio (d)": lambda x: fmt_num(x, 2),
+                "TAT L (d)":      lambda x: "" if pd.isna(x) else fmt_num(x, 2),
+                "TAT F (d)":      lambda x: "" if pd.isna(x) else fmt_num(x, 2),
                 "Ocorrências":   lambda x: fmt_num(x),
             })
             .map(lambda v: estilo_pct_meta(v, meta_prazo), subset=["% Prazo"])
             .map(lambda v: estilo_pct_meta(v, meta_entrega), subset=["% Entrega"])
             .background_gradient(subset=["% TE Meta"],     cmap="RdYlGn", vmin=0,  vmax=100)
-            .background_gradient(subset=["TAT Médio (d)"], cmap="RdYlGn_r", vmin=1, vmax=7)
+            .background_gradient(subset=["TAT L (d)"], cmap="RdYlGn_r", vmin=1, vmax=7)
+            .background_gradient(subset=["TAT F (d)"], cmap="RdYlGn_r", vmin=1, vmax=7)
             .background_gradient(subset=["TE Medio (d)"],  cmap="RdYlGn_r", vmin=1, vmax=5),
         use_container_width=True, height=320,
     )
@@ -1305,23 +1321,25 @@ else:
         Entregues   = ("Status",  lambda x: (x == "Entregue").sum()),
         NoPrazo     = ("NoPrazo", "sum"),
         Devolvidos  = ("Status",  lambda x: (x == "Devolvido").sum()),
-        TAT_med     = ("TAT_dias","mean"),
+        TAT_L_med   = ("TAT_L_dias","mean"),
+        TAT_F_med   = ("TAT_F_dias","mean"),
         Ocorrencias = ("TemOcorr","sum"),
     ).reset_index()
     pdv_resumo["PctEntrega"] = (pdv_resumo["Entregues"] / pdv_resumo["Total"]                  * 100).round(2)
     pdv_resumo["PctPrazo"]   = (pdv_resumo["NoPrazo"]   / pdv_resumo["Entregues"].replace(0,1) * 100).round(2)
     pdv_resumo["ForaPrazo"]  = pdv_resumo["Entregues"] - pdv_resumo["NoPrazo"]
-    pdv_resumo["TAT_med"]    = pdv_resumo["TAT_med"].round(2)
+    pdv_resumo["TAT_L_med"]  = pdv_resumo["TAT_L_med"].round(2)
+    pdv_resumo["TAT_F_med"]  = pdv_resumo["TAT_F_med"].round(2)
     pdv_resumo["CustoRateado"] = (pdv_resumo["Total"] * custo_por_pedido).round(2)
     pdv_resumo = pdv_resumo.sort_values("Total", ascending=False)
 
     tabela_pdv = pdv_resumo[[
         "PDV","Total","Entregues","PctEntrega","NoPrazo","PctPrazo",
-        "ForaPrazo","Devolvidos","TAT_med","Ocorrencias","CustoRateado"
+        "ForaPrazo","Devolvidos","TAT_L_med","TAT_F_med","Ocorrencias","CustoRateado"
     ]].rename(columns={
         "Total":"Pedidos","PctEntrega":"% Entrega",
         "NoPrazo":"No Prazo","PctPrazo":"% Prazo","ForaPrazo":"Fora Prazo",
-        "TAT_med":"TAT Medio (d)","Ocorrencias":"Ocorrencias",
+        "TAT_L_med":"TAT L (d)","TAT_F_med":"TAT F (d)","Ocorrencias":"Ocorrencias",
         "CustoRateado":"Custo Rateado",
     }).reset_index(drop=True)
 
@@ -1335,13 +1353,15 @@ else:
                 "% Prazo":       lambda x: fmt_pct(x, 2),
                 "Fora Prazo":    lambda x: fmt_num(x),
                 "Devolvidos":    lambda x: fmt_num(x),
-                "TAT Medio (d)": lambda x: fmt_num(x, 2),
+                "TAT L (d)":     lambda x: "" if pd.isna(x) else fmt_num(x, 2),
+                "TAT F (d)":     lambda x: "" if pd.isna(x) else fmt_num(x, 2),
                 "Ocorrencias":   lambda x: fmt_num(x),
                 "Custo Rateado": lambda x: fmt_brl(x),
             })
             .map(lambda v: estilo_pct_meta(v, meta_prazo), subset=["% Prazo"])
             .map(lambda v: estilo_pct_meta(v, meta_entrega), subset=["% Entrega"])
-            .background_gradient(subset=["TAT Medio (d)"], cmap="RdYlGn_r", vmin=1, vmax=7)
+            .background_gradient(subset=["TAT L (d)"], cmap="RdYlGn_r", vmin=1, vmax=7)
+            .background_gradient(subset=["TAT F (d)"], cmap="RdYlGn_r", vmin=1, vmax=7)
             .background_gradient(subset=["Custo Rateado"], cmap="YlOrRd"),
         use_container_width=True, height=260,
     )
