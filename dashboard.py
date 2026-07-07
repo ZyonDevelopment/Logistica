@@ -160,6 +160,14 @@ def find_col(df, *kws):
             except: pass
     return None
 
+def chave_numero_inicial(v):
+    if pd.isna(v):
+        return ""
+    s = str(v).strip()
+    s = re.sub(r"\.0$", "", s)
+    m = re.match(r"^(\d+)", s)
+    return m.group(1) if m else ""
+
 def ordenar_stack(df_p, col_cat, col_status, col_val):
     ordem_cat = (df_p.groupby(col_cat)[col_val].sum()
                      .sort_values(ascending=False).index.tolist())
@@ -406,6 +414,8 @@ def carregar():
     df_log["NoPrazo"]   = (df_log["Status"] == "Entregue") & (df_log["_efetuada"].dt.date <= df_log["_prazo"].dt.date)
     df_log["PDV"]       = df_log["Expedidor"].apply(extrair_pdv)
     df_log["Pedido"]    = df_log["Pedido"].astype(str).str.strip()
+    col_pedido_compra = find_col(df_log, "Pedido de Compra")
+    df_log["_chave_omni"] = df_log[col_pedido_compra].apply(chave_numero_inicial) if col_pedido_compra else ""
     col_mun = find_col(df_log, "Munic", "unicipio")
     df_log["Municipio"] = df_log[col_mun].str.title() if col_mun else ""
     df_log["Rota"] = df_log["Municipio"].apply(lambda x: "Local" if eh_itabuna(x) else "Fora")
@@ -442,6 +452,8 @@ def carregar():
     col_canal = find_col(df_ped, "CanalDistribuicao","Canal")
     if col_canal:
         df_ped["PDV_Ped"] = df_ped[col_canal].apply(extrair_pdv)
+    col_ext_ped = find_col(df_ped, "Cód Externo Pedido", "Cod Externo Pedido", "Externo")
+    df_ped["_chave_omni"] = df_ped[col_ext_ped].apply(chave_numero_inicial) if col_ext_ped else ""
 
     # ── Classificação TipoCanal ────────────────────────────────────────────────
     # Omnichannel  = MeioCaptacao contém "Omni" (prioridade)
@@ -462,6 +474,27 @@ def carregar():
 
     df_join = df_log.merge(df_ped, left_on="Pedido", right_on="CodigoPedido",
                            how="left", suffixes=("","_ped"))
+    ped_omni_key = (
+        df_ped[(df_ped["TipoCanal"] == "Omnichannel") & (df_ped["_chave_omni"] != "")]
+        .drop_duplicates("_chave_omni")
+        .add_suffix("_omni")
+    )
+    if not ped_omni_key.empty:
+        df_join = df_join.merge(
+            ped_omni_key,
+            left_on="_chave_omni",
+            right_on="_chave_omni_omni",
+            how="left",
+        )
+        for col in df_ped.columns:
+            col_omni = f"{col}_omni"
+            if col_omni not in df_join.columns:
+                continue
+            if col not in df_join.columns:
+                df_join[col] = df_join[col_omni]
+            else:
+                df_join[col] = df_join[col].where(df_join[col].notna(), df_join[col_omni])
+        df_join = df_join.drop(columns=[c for c in df_join.columns if c.endswith("_omni")])
     if "DataFaturamento" in df_join.columns:
         df_join["_faturamento"] = pd.to_datetime(df_join["DataFaturamento"], errors="coerce")
     else:
@@ -531,9 +564,14 @@ df = df_log[mask].copy()
 if canal_sel == "Não Logístico":
     df = df.iloc[0:0].copy()           # não logístico nunca tem registro no CSV
 elif canal_sel == "Omnichannel":
-    ids_omni = set(df_ped[df_ped["TipoCanal"] == "Omnichannel"]["CodigoPedido"])
-    df = df[df["Pedido"].isin(ids_omni)].copy()
-# "Logístico" e "Todos" mantêm df intacto
+    omni_ped = df_ped[df_ped["TipoCanal"] == "Omnichannel"]
+    ids_omni = set(omni_ped["CodigoPedido"])
+    chaves_omni = set(omni_ped["_chave_omni"]) - {""}
+    df = df[df["Pedido"].isin(ids_omni) | df["_chave_omni"].isin(chaves_omni)].copy()
+elif canal_sel == "Logístico":
+    chaves_omni = set(df_ped.loc[df_ped["TipoCanal"] == "Omnichannel", "_chave_omni"]) - {""}
+    df = df[~df["_chave_omni"].isin(chaves_omni)].copy()
+# "Todos" mantém df intacto
 
 # Pedidos comerciais — filtro canal
 if canal_sel == "Todos":
