@@ -232,6 +232,66 @@ def add_stacked_hbar_label_boxes(fig, df_plot, *, group_col, stack_col, value_co
     add_hbar_label_boxes(fig, work, y_col=group_col, x_col=value_col, text_col=text_col, base_col="_base")
     fig.update_traces(text=None)
 
+def preparar_resumo_tempo(df_base, *, tempo_col, meta_tipo, visao):
+    base = df_base.copy()
+    if tempo_col not in base.columns:
+        return pd.DataFrame()
+    base = base[base[tempo_col].between(0, 30)].copy()
+    if base.empty:
+        return pd.DataFrame()
+    base["Meta"] = base["Municipio"].apply(lambda x: meta_tempo_por_municipio(x, tipo=meta_tipo))
+    base["DentroMeta"] = base[tempo_col] <= base["Meta"]
+    base["Rota"] = base["Municipio"].apply(lambda x: "Local" if eh_itabuna(x) else "Fora")
+    grupo = "Municipio" if visao == "Cidade" else "PDV"
+    resumo = (
+        base.groupby(grupo)
+        .agg(
+            Media=(tempo_col, "mean"),
+            MetaMedia=("Meta", "mean"),
+            DentroMeta=("DentroMeta", "mean"),
+            Pedidos=("Pedido", "count"),
+            Rota=("Rota", lambda x: "Local" if (x == "Local").all() else ("Fora" if (x == "Fora").all() else "Misto")),
+        )
+        .reset_index()
+        .rename(columns={grupo: "Grupo"})
+    )
+    resumo["Media"] = resumo["Media"].round(2)
+    resumo["MetaMedia"] = resumo["MetaMedia"].round(2)
+    resumo["PctMeta"] = (resumo["DentroMeta"] * 100).round(1)
+    resumo["Cor"] = resumo.apply(lambda r: COR_OK if r["Media"] <= r["MetaMedia"] else COR_ERR, axis=1)
+    resumo["Rotulo"] = resumo.apply(
+        lambda r: f"{fmt_num(r['Media'],1)}d | meta {fmt_num(r['MetaMedia'],1)}d | {fmt_pct(r['PctMeta'],1)}",
+        axis=1,
+    )
+    return resumo.sort_values("Media", ascending=True)
+
+def render_tempo_bar(resumo, *, titulo):
+    if resumo.empty:
+        st.info(f"Sem dados para {titulo}.")
+        return
+    fig = go.Figure(go.Bar(
+        x=resumo["Media"],
+        y=resumo["Grupo"],
+        orientation="h",
+        marker_color=resumo["Cor"],
+        customdata=resumo[["MetaMedia", "PctMeta", "Pedidos", "Rota"]],
+        hovertemplate=(
+            "%{y}<br>Média: %{x:.2f} dias<br>"
+            "Meta média: %{customdata[0]:.2f} dias<br>"
+            "Dentro da meta: %{customdata[1]:.1f}%<br>"
+            "Pedidos: %{customdata[2]}<br>Rota: %{customdata[3]}<extra></extra>"
+        ),
+    ))
+    add_hbar_label_boxes(fig, resumo, y_col="Grupo", x_col="Media", text_col="Rotulo", xanchor="left")
+    fig.update_layout(**layout_br(
+        title=titulo,
+        height=max(360, 34 * len(resumo) + 110),
+        margin=dict(t=55,b=10,l=10,r=170),
+        xaxis_title="Dias",
+        yaxis_title="",
+    ))
+    st.plotly_chart(fig, use_container_width=True)
+
 def _serie_limpa(s, vazio="Sem ocorrencia/mensagem registrada"):
     out = s.fillna("").astype(str).str.strip()
     return out.where(out.str.len() > 0, vazio)
@@ -991,77 +1051,53 @@ st.markdown("---")
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
-st.markdown('<p class="secao">TEMPO DE ATENDIMENTO (TAT) - Da aprovacao a entrega</p>', unsafe_allow_html=True)
+st.markdown('<p class="secao">TEMPO DE ATENDIMENTO - TAT e TP por cidade/PDV</p>', unsafe_allow_html=True)
 st.markdown(BADGE_LOG, unsafe_allow_html=True)
 if tat_invalidos:
     st.caption(f"{fmt_num(tat_invalidos)} registro(s) com TAT negativo foram desconsiderados das medias.")
+if tp_invalidos:
+    st.caption(f"{fmt_num(tp_invalidos)} registro(s) com TP negativo foram desconsiderados das medias.")
 
 if total_log == 0:
-    st.info(f"Sem dados logísticos para o canal '{canal_sel}'.")
+    st.info(f"Sem dados logisticos para o canal '{canal_sel}'.")
 else:
-    df_tat = df[(df["Status"]=="Entregue") & df["TAT_dias"].between(0,30)].copy()
+    df_tat = df[(df["Status"] == "Entregue") & df["TAT_dias"].between(0, 30)].copy()
+    df_tp = dj[dj["TP_dias"].between(0, 30)].copy() if "TP_dias" in dj.columns else pd.DataFrame()
 
-    if len(df_tat) > 0:
-        df_tat["MetaTAT"] = df_tat["Municipio"].apply(lambda x: meta_tempo_por_municipio(x, tipo="tat"))
-        df_tat["TAT_OK"] = df_tat["TAT_dias"] <= df_tat["MetaTAT"]
-        pct_tat_ok = df_tat["TAT_OK"].mean() * 100
-        tat_np = df_tat[df_tat["NoPrazo"]==True]["TAT_dias"].mean()
-        tat_fp = df_tat[df_tat["NoPrazo"]==False]["TAT_dias"].mean()
-        tat_np = tat_np if pd.notna(tat_np) else 0.0
-        tat_fp = tat_fp if pd.notna(tat_fp) else 0.0
-        st.markdown(
-            f'<div class="narrativa">TAT médio geral: <b>{fmt_num(tat_med, 1)} dias</b>. '
-            f'Meta: <b>2 dias Itabuna / 3 dias fora</b> · '
-            f'Dentro da meta: <b>{fmt_pct(pct_tat_ok, 1)}</b>. '
-            f'No prazo: <b>{fmt_num(tat_np, 1)} dias</b> · '
-            f'Fora do prazo: <b>{fmt_num(tat_fp, 1)} dias</b> '
-            f'(diferença de <b>{fmt_num(abs(tat_fp-tat_np), 1)} dia(s)</b>).</div>',
-            unsafe_allow_html=True
+    if df_tat.empty and df_tp.empty:
+        st.info("Sem dados de TAT/TP para os filtros selecionados.")
+    else:
+        visao_tempo = st.radio(
+            "Visualizar tempos por",
+            ["Cidade", "PDV"],
+            index=0,
+            horizontal=True,
+            key="visao_tempo_atendimento",
         )
 
-        c6, c7 = st.columns(2)
+        tat_resumo = preparar_resumo_tempo(df_tat, tempo_col="TAT_dias", meta_tipo="tat", visao=visao_tempo)
+        tp_resumo = preparar_resumo_tempo(df_tp, tempo_col="TP_dias", meta_tipo="tp", visao=visao_tempo)
 
-        with c6:
-            fig = px.histogram(df_tat, x="TAT_dias", nbins=25,
-                               color="NoPrazo",
-                               color_discrete_map={True: COR_OK, False: COR_WARN},
-                               barmode="overlay", opacity=0.8,
-                               title="Distribuição do TAT",
-                               labels={"TAT_dias":"Dias","NoPrazo":"No prazo?"})
-            fig.add_vline(x=tat_med, line_dash="dash", line_color="#f1f5f9",
-                          annotation_text=f"Média {fmt_num(tat_med,1)}d",
-                          annotation_position="top right",
-                          annotation_font_color="#f1f5f9")
-            fig.update_layout(**layout_br(height=360, margin=dict(t=55,b=10,l=10,r=10),
-                                          legend=dict(orientation="h", y=-0.1)))
-            st.plotly_chart(fig, use_container_width=True)
+        pct_tat_ok = tat_resumo["PctMeta"].mean() if not tat_resumo.empty else 0
+        pct_tp_ok = tp_resumo["PctMeta"].mean() if not tp_resumo.empty else 0
+        tat_media = df_tat["TAT_dias"].mean() if not df_tat.empty else 0
+        tp_media = df_tp["TP_dias"].mean() if not df_tp.empty else 0
 
-        with c7:
-            tat_pdv = (df_tat.groupby("PDV")["TAT_dias"]
-                             .agg(Media="mean",
-                                  P25=lambda x: x.quantile(.25),
-                                  P75=lambda x: x.quantile(.75))
-                             .round(2).reset_index().sort_values("Media"))
-            fig2 = go.Figure()
-            for _, r in tat_pdv.iterrows():
-                fig2.add_trace(go.Bar(
-                    x=[r["PDV"]], y=[r["Media"]],
-                    marker_color=COR_NEU, showlegend=False,
-                    text=f"{fmt_num(r['Media'],1)}d", textposition="outside",
-                    error_y=dict(type="data",
-                                 array=[r["P75"]-r["Media"]],
-                                 arrayminus=[r["Media"]-r["P25"]], visible=True),
-                ))
-            tat_pdv["Rotulo"] = tat_pdv["Media"].apply(lambda x: f"{fmt_num(x,1)}d")
-            fig2.update_layout(**layout_br(
-                title="TAT Médio por PDV",
-                height=360, margin=dict(t=55,b=10,l=10,r=10),
-                yaxis_title="Dias", xaxis_title="",
-            ))
-            add_vbar_label_boxes(fig2, tat_pdv, x_col="PDV", y_col="Media", text_col="Rotulo")
-            fig2.update_traces(text=None)
-            st.plotly_chart(fig2, use_container_width=True)
+        st.markdown(
+            f'<div class="narrativa">'
+            f'<b>TAT</b> = aprovacao ate entrega; meta <b>2 dias local / 3 dias fora</b>. '
+            f'Media atual: <b>{fmt_num(tat_media, 1)} dias</b>; dentro da meta: <b>{fmt_pct(pct_tat_ok, 1)}</b>.<br>'
+            f'<b>TP</b> = aprovacao ate faturamento; meta <b>1 dia local / 2 dias fora</b>. '
+            f'Media atual: <b>{fmt_num(tp_media, 1)} dias</b>; dentro da meta: <b>{fmt_pct(pct_tp_ok, 1)}</b>.'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
+        c_tat, c_tp = st.columns(2)
+        with c_tat:
+            render_tempo_bar(tat_resumo, titulo=f"TAT por {visao_tempo.lower()} - meta local/fora")
+        with c_tp:
+            render_tempo_bar(tp_resumo, titulo=f"TP por {visao_tempo.lower()} - meta local/fora")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
@@ -1069,10 +1105,9 @@ st.markdown("---")
 # -----------------------------------------------------------------------------
 st.markdown('<p class="secao">🚚 MOTORISTAS — Desempenho individual de cada entregador</p>', unsafe_allow_html=True)
 st.markdown(BADGE_LOG, unsafe_allow_html=True)
-if tp_invalidos or te_invalidos:
+if te_invalidos:
     st.caption(
-        f"{fmt_num(tp_invalidos)} TP negativo(s) e {fmt_num(te_invalidos)} TE negativo(s) "
-        "foram desconsiderados das medias."
+        f"{fmt_num(te_invalidos)} TE negativo(s) foram desconsiderados das medias."
     )
 
 if total_log == 0:
@@ -1080,13 +1115,11 @@ if total_log == 0:
 else:
     col_mot = find_col(dj, "Motorista") or find_col(df, "Motorista")
     df_mot_base = dj.copy() if len(dj) else df.copy()
-    for col_tempo in ["TP_dias", "TE_dias"]:
+    for col_tempo in ["TE_dias"]:
         if col_tempo not in df_mot_base.columns:
             df_mot_base[col_tempo] = pd.NA
     df_mot_base["Motorista"] = df_mot_base[col_mot].fillna("Sem motorista atribuído") if col_mot else "N/D"
-    df_mot_base["MetaTP"] = df_mot_base["Municipio"].apply(lambda x: meta_tempo_por_municipio(x, tipo="tp"))
     df_mot_base["MetaTE"] = df_mot_base["Municipio"].apply(lambda x: meta_tempo_por_municipio(x, tipo="te"))
-    df_mot_base["TP_OK"] = df_mot_base["TP_dias"].between(0, 30) & (df_mot_base["TP_dias"] <= df_mot_base["MetaTP"]) if "TP_dias" in df_mot_base.columns else False
     df_mot_base["TE_OK"] = df_mot_base["TE_dias"].between(0, 30) & (df_mot_base["TE_dias"] <= df_mot_base["MetaTE"]) if "TE_dias" in df_mot_base.columns else False
 
     mot = df_mot_base.groupby("Motorista").agg(
@@ -1095,9 +1128,7 @@ else:
         NoPrazo     = ("NoPrazo", "sum"),
         Devolvidos  = ("Status",  lambda x: (x == "Devolvido").sum()),
         TAT_med     = ("TAT_dias","mean"),
-        TP_med      = ("TP_dias", "mean"),
         TE_med      = ("TE_dias", "mean"),
-        TP_OK       = ("TP_OK", "sum"),
         TE_OK       = ("TE_OK", "sum"),
         Ocorrencias = ("TemOcorr","sum"),
     ).reset_index()
@@ -1105,9 +1136,7 @@ else:
     mot["PctPrazo"]   = (mot["NoPrazo"]   / mot["Entregues"].replace(0,1) * 100).round(2)
     mot["ForaPrazo"]  = mot["Entregues"] - mot["NoPrazo"]
     mot["TAT_med"]    = mot["TAT_med"].round(2)
-    mot["TP_med"]     = mot["TP_med"].round(2)
     mot["TE_med"]     = mot["TE_med"].round(2)
-    mot["PctTP"]      = (mot["TP_OK"] / mot["Total"].replace(0, 1) * 100).round(2)
     mot["PctTE"]      = (mot["TE_OK"] / mot["Entregues"].replace(0, 1) * 100).round(2)
     mot_ativos = mot[mot["Motorista"] != "Sem motorista atribuído"].sort_values("Total", ascending=False)
     n_sem_mot  = int(mot.loc[mot["Motorista"] == "Sem motorista atribuído", "Total"].sum())
@@ -1133,7 +1162,7 @@ else:
 
     visao_mot = st.radio(
         "Visão dos motoristas",
-        ["Volume / status", "% no prazo", "TP", "TE"],
+        ["Volume / status", "% no prazo", "TE"],
         index=0,
         horizontal=True,
         key="visao_motoristas",
@@ -1188,10 +1217,10 @@ else:
         fig.update_traces(text=None)
         st.plotly_chart(fig, use_container_width=True)
 
-    elif visao_mot in ("TP", "TE"):
-        col_tempo = "TP_med" if visao_mot == "TP" else "TE_med"
-        col_pct = "PctTP" if visao_mot == "TP" else "PctTE"
-        titulo = "TP - aprovação até faturamento" if visao_mot == "TP" else "TE - coleta BG até entrega"
+    elif visao_mot == "TE":
+        col_tempo = "TE_med"
+        col_pct = "PctTE"
+        titulo = "TE - coleta BG até entrega"
         dados = mot_ativos.sort_values(col_tempo, ascending=True).copy()
         cores = [COR_ERR if v > 2 else COR_WARN if v > 1 else COR_OK for v in dados[col_tempo].fillna(99)]
         fig = go.Figure(go.Bar(
@@ -1219,11 +1248,10 @@ else:
     st.markdown("**Resumo por motorista:**")
     tabela_mot = mot_ativos[[
         "Motorista","Total","Entregues","PctEntrega","NoPrazo","PctPrazo",
-        "ForaPrazo","Devolvidos","TAT_med","TP_med","PctTP","TE_med","PctTE","Ocorrencias"
+        "ForaPrazo","Devolvidos","TAT_med","TE_med","PctTE","Ocorrencias"
     ]].rename(columns={
         "Total":"Pedidos","PctEntrega":"% Entrega",
         "NoPrazo":"No Prazo","PctPrazo":"% Prazo","ForaPrazo":"Fora Prazo",
-        "TP_med":"TP Medio (d)","PctTP":"% TP Meta",
         "TE_med":"TE Medio (d)","PctTE":"% TE Meta",
         "TAT_med":"TAT Médio (d)","Ocorrencias":"Ocorrências",
     }).reset_index(drop=True)
@@ -1238,8 +1266,6 @@ else:
                 "% Prazo":       lambda x: fmt_pct(x, 2),
                 "Fora Prazo":    lambda x: fmt_num(x),
                 "Devolvidos":    lambda x: fmt_num(x),
-                "TP Medio (d)":   lambda x: fmt_num(x, 2),
-                "% TP Meta":      lambda x: fmt_pct(x, 2),
                 "TE Medio (d)":   lambda x: fmt_num(x, 2),
                 "% TE Meta":      lambda x: fmt_pct(x, 2),
                 "TAT Médio (d)": lambda x: fmt_num(x, 2),
@@ -1247,10 +1273,8 @@ else:
             })
             .map(lambda v: estilo_pct_meta(v, meta_prazo), subset=["% Prazo"])
             .map(lambda v: estilo_pct_meta(v, meta_entrega), subset=["% Entrega"])
-            .background_gradient(subset=["% TP Meta"],     cmap="RdYlGn", vmin=0,  vmax=100)
             .background_gradient(subset=["% TE Meta"],     cmap="RdYlGn", vmin=0,  vmax=100)
             .background_gradient(subset=["TAT Médio (d)"], cmap="RdYlGn_r", vmin=1, vmax=7)
-            .background_gradient(subset=["TP Medio (d)"],  cmap="RdYlGn_r", vmin=1, vmax=5)
             .background_gradient(subset=["TE Medio (d)"],  cmap="RdYlGn_r", vmin=1, vmax=5),
         use_container_width=True, height=320,
     )
