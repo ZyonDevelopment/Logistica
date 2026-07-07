@@ -46,6 +46,10 @@ st.markdown("""
         background:#1e293b; border-radius:10px;
         padding:12px 16px; border-left:3px solid #6366f1;
     }
+    .js-plotly-plot .annotation rect {
+        rx: 6px;
+        ry: 6px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -159,6 +163,59 @@ def layout_br(**kwargs):
 def dias_entre(inicio, fim):
     dias = (fim - inicio).dt.total_seconds() / 86400
     return dias.where(dias >= 0)
+
+def add_hbar_label_boxes(fig, df_plot, *, y_col, x_col, text_col, base_col=None, xanchor="right"):
+    for _, row in df_plot.iterrows():
+        valor = row.get(x_col, 0)
+        texto = str(row.get(text_col, "") or "")
+        if pd.isna(valor) or valor <= 0 or not texto:
+            continue
+        base = row.get(base_col, 0) if base_col else 0
+        fig.add_annotation(
+            x=base + valor,
+            y=row[y_col],
+            text=texto,
+            showarrow=False,
+            xanchor=xanchor,
+            yanchor="middle",
+            font=dict(color="#f8fafc", size=13),
+            bgcolor="rgba(51,65,85,0.96)",
+            bordercolor="rgba(148,163,184,0.85)",
+            borderwidth=1,
+            borderpad=4,
+        )
+
+def add_vbar_label_boxes(fig, df_plot, *, x_col, y_col, text_col):
+    ymax = pd.to_numeric(df_plot[y_col], errors="coerce").max()
+    offset = (ymax or 1) * 0.025
+    for _, row in df_plot.iterrows():
+        valor = row.get(y_col, 0)
+        texto = str(row.get(text_col, "") or "")
+        if pd.isna(valor) or valor <= 0 or not texto:
+            continue
+        fig.add_annotation(
+            x=row[x_col],
+            y=valor + offset,
+            text=texto,
+            showarrow=False,
+            xanchor="center",
+            yanchor="bottom",
+            font=dict(color="#f8fafc", size=13),
+            bgcolor="rgba(51,65,85,0.96)",
+            bordercolor="rgba(148,163,184,0.85)",
+            borderwidth=1,
+            borderpad=4,
+        )
+    fig.update_yaxes(range=[0, (ymax or 1) * 1.14])
+
+def add_stacked_hbar_label_boxes(fig, df_plot, *, group_col, stack_col, value_col, text_col, stack_order=None):
+    work = df_plot.copy()
+    order = stack_order or work[stack_col].dropna().unique().tolist()
+    work["_stack_ordem"] = work[stack_col].apply(lambda x: order.index(x) if x in order else len(order))
+    work = work.sort_values([group_col, "_stack_ordem"])
+    work["_base"] = work.groupby(group_col)[value_col].cumsum() - work[value_col]
+    add_hbar_label_boxes(fig, work, y_col=group_col, x_col=value_col, text_col=text_col, base_col="_base")
+    fig.update_traces(text=None)
 
 def _serie_limpa(s, vazio="Sem ocorrencia/mensagem registrada"):
     out = s.fillna("").astype(str).str.strip()
@@ -572,6 +629,12 @@ with c_esq:
             legend=dict(orientation="h", y=-0.1),
             xaxis_title="Pedidos", yaxis_title="",
         ))
+        pdv_overview["RotuloLog"] = pdv_overview["Logistica"].apply(fmt_num)
+        pdv_overview["RotuloSemLog"] = pdv_overview["SemLogistica"].apply(fmt_num)
+        pdv_overview["BaseSemLog"] = pdv_overview["Logistica"]
+        add_hbar_label_boxes(fig, pdv_overview, y_col="PDV_Ped", x_col="Logistica", text_col="RotuloLog")
+        add_hbar_label_boxes(fig, pdv_overview, y_col="PDV_Ped", x_col="SemLogistica", text_col="RotuloSemLog", base_col="BaseSemLog")
+        fig.update_traces(text=None)
         st.markdown(BADGE_BOTH, unsafe_allow_html=True)
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -586,6 +649,8 @@ with c_esq:
             fig_m.update_traces(textposition="outside")
             fig_m.update_layout(**layout_br(height=380, margin=dict(t=55,b=10,l=10,r=10),
                                             xaxis_title="Pedidos", yaxis_title=""))
+            add_hbar_label_boxes(fig_m, meio_f, y_col="Canal", x_col="Qtd", text_col="RotuloQtd", xanchor="left")
+            fig_m.update_traces(text=None)
             st.markdown(BADGE_PED, unsafe_allow_html=True)
             st.plotly_chart(fig_m, use_container_width=True)
 
@@ -609,6 +674,8 @@ with c_dir:
         fig_t.update_traces(textposition="outside")
         fig_t.update_layout(**layout_br(height=360, margin=dict(t=65,b=10,l=10,r=10),
                                         yaxis_title="", xaxis_title="Pedidos"))
+        add_hbar_label_boxes(fig_t, tp_cnt, y_col="Tipo", x_col="Qtd", text_col="RotuloQtd", xanchor="left")
+        fig_t.update_traces(text=None)
         st.plotly_chart(fig_t, use_container_width=True)
 
 if canal_sel == "Não Logístico":
@@ -645,7 +712,7 @@ else:
     else:
         visao_ent = st.radio(
             "Visao de entregues",
-            ["Prazo", "PDV", "Municipios", "Evolucao", "Atrasos"],
+            ["Prazo", "PDV", "Municipios", "Evolucao"],
             index=0,
             horizontal=True,
             key="visao_entregues",
@@ -664,7 +731,7 @@ else:
                 hole=0.55, color="Situacao",
                 color_discrete_map={"No prazo": COR_OK, "Fora do prazo": COR_WARN},
             )
-            fig.update_traces(textinfo="percent+value", textfont_size=13)
+            fig.update_traces(textinfo="percent+value", textfont_size=14)
             fig.update_layout(**layout_br(height=420, margin=dict(t=65,b=10,l=10,r=10),
                                           legend=dict(orientation="h", y=-0.08)))
             st.plotly_chart(fig, use_container_width=True)
@@ -698,6 +765,12 @@ else:
                 margin=dict(t=55,b=10,l=10,r=10),
                 legend=dict(orientation="h", y=-0.08),
             ))
+            pdv_ent["RotuloNoPrazo"] = pdv_ent["NoPrazo"].apply(fmt_num)
+            pdv_ent["RotuloForaPrazo"] = pdv_ent["ForaPrazo"].apply(fmt_num)
+            pdv_ent["BaseForaPrazo"] = pdv_ent["NoPrazo"]
+            add_hbar_label_boxes(fig, pdv_ent, y_col="PDV", x_col="NoPrazo", text_col="RotuloNoPrazo")
+            add_hbar_label_boxes(fig, pdv_ent, y_col="PDV", x_col="ForaPrazo", text_col="RotuloForaPrazo", base_col="BaseForaPrazo")
+            fig.update_traces(text=None)
             st.plotly_chart(fig, use_container_width=True)
 
         elif visao_ent == "Municipios":
@@ -724,6 +797,8 @@ else:
                 height=480, margin=dict(t=65,b=10,l=10,r=170), yaxis_title="",
                 coloraxis_colorbar=dict(title="% Prazo", thickness=14, len=0.7),
             ))
+            add_hbar_label_boxes(fig, muni_ent, y_col="Municipio", x_col="Total", text_col="Rotulo", xanchor="left")
+            fig.update_traces(text=None)
             st.plotly_chart(fig, use_container_width=True)
 
         elif visao_ent == "Evolucao":
@@ -742,18 +817,19 @@ else:
                 xaxis_title="", yaxis_title="Pedidos entregues",
                 legend=dict(orientation="h", y=1.12, x=0),
             ))
+            add_vbar_label_boxes(fig_evol, evol, x_col="Dia", y_col="Qtd", text_col="RotuloQtd")
+            fig_evol.update_traces(text=None)
             st.plotly_chart(fig_evol, use_container_width=True)
 
-        elif visao_ent == "Atrasos":
-            if len(df_atraso) > 0:
-                render_excecoes_pivot(
-                    preparar_excecoes(df_atraso),
-                    titulo=f"Entregues com atraso - tabela dinamica ({fmt_num(len(df_atraso))} pedidos)",
-                    dias_label="Dias de atraso",
-                    key_prefix="atraso",
-                )
-            else:
-                st.success("Nao ha entregues com atraso no filtro atual.")
+        if len(df_atraso) > 0:
+            render_excecoes_pivot(
+                preparar_excecoes(df_atraso),
+                titulo=f"Entregues com atraso - tabela dinamica ({fmt_num(len(df_atraso))} pedidos)",
+                dias_label="Dias de atraso",
+                key_prefix="atraso",
+            )
+        else:
+            st.success("Nao ha entregues com atraso no filtro atual.")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
@@ -849,6 +925,15 @@ else:
                                       yaxis_title="", xaxis_title="Pedidos",
                                       showlegend=mostrar_legenda,
                                       legend=dict(orientation="h", y=-0.18, x=0)))
+        add_stacked_hbar_label_boxes(
+            fig,
+            graf_nent,
+            group_col="Grupo",
+            stack_col="Status",
+            value_col="Qtd",
+            text_col="RotuloQtd",
+            stack_order=[s for s in ORDEM_STACK if s != "Entregue"],
+        )
         st.plotly_chart(fig, use_container_width=True)
 
         col_ult = find_col(df_log, "ltima Ocorr","Ultima")
@@ -938,11 +1023,14 @@ else:
                                  array=[r["P75"]-r["Media"]],
                                  arrayminus=[r["Media"]-r["P25"]], visible=True),
                 ))
+            tat_pdv["Rotulo"] = tat_pdv["Media"].apply(lambda x: f"{fmt_num(x,1)}d")
             fig2.update_layout(**layout_br(
                 title="TAT Médio por PDV",
                 height=360, margin=dict(t=55,b=10,l=10,r=10),
                 yaxis_title="Dias", xaxis_title="",
             ))
+            add_vbar_label_boxes(fig2, tat_pdv, x_col="PDV", y_col="Media", text_col="Rotulo")
+            fig2.update_traces(text=None)
             st.plotly_chart(fig2, use_container_width=True)
 
 st.markdown("---")
@@ -1016,7 +1104,7 @@ else:
 
     visao_mot = st.radio(
         "Visão dos motoristas",
-        ["Volume / status", "% no prazo", "TP", "TE", "Tabela"],
+        ["Volume / status", "% no prazo", "TP", "TE"],
         index=0,
         horizontal=True,
         key="visao_motoristas",
@@ -1037,6 +1125,15 @@ else:
         fig.update_layout(**layout_br(height=420, margin=dict(t=55,b=10,l=10,r=10),
                                       xaxis_title="Pedidos", yaxis_title="",
                                       legend=dict(orientation="h", y=-0.2, x=0)))
+        add_stacked_hbar_label_boxes(
+            fig,
+            status_mot,
+            group_col="Motorista",
+            stack_col="Status",
+            value_col="Qtd",
+            text_col="RotuloQtd",
+            stack_order=ORDEM_STACK,
+        )
         st.plotly_chart(fig, use_container_width=True)
 
     elif visao_mot == "% no prazo":
@@ -1057,6 +1154,9 @@ else:
             xaxis=dict(title="% no prazo", range=[0, 115]),
             yaxis_title="",
         ))
+        mot_prazo["RotuloPrazo"] = mot_prazo["PctPrazo"].apply(lambda x: fmt_pct(x, 2))
+        add_hbar_label_boxes(fig, mot_prazo, y_col="Motorista", x_col="PctPrazo", text_col="RotuloPrazo", xanchor="left")
+        fig.update_traces(text=None)
         st.plotly_chart(fig, use_container_width=True)
 
     elif visao_mot in ("TP", "TE"):
@@ -1082,6 +1182,9 @@ else:
             height=420, margin=dict(t=55,b=10,l=10,r=80),
             xaxis_title="Dias", yaxis_title="",
         ))
+        dados["RotuloTempo"] = dados[col_tempo].apply(lambda x: "" if pd.isna(x) else f"{fmt_num(x,1)}d")
+        add_hbar_label_boxes(fig, dados, y_col="Motorista", x_col=col_tempo, text_col="RotuloTempo", xanchor="left")
+        fig.update_traces(text=None)
         st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("**Resumo por motorista:**")
